@@ -153,34 +153,11 @@ void load_and_apply_shader(uint name)
     }
 }
 
-void render()
+void swap_particles_buffers()
 {
-    vec4 sel(
-        map_coord_from(selection_start.x, shift.x, WINDOW_WIDTH),
-        map_coord_from(selection_start.y, shift.y, WINDOW_HEIGHT),
-        map_coord_from(prev_mouse_pos.x, shift.x, WINDOW_WIDTH),
-        map_coord_from(prev_mouse_pos.y, shift.y, WINDOW_HEIGHT)
-    );
-
-    if (sel.z < sel.x)
-    {
-        float tmp = sel.z;
-        sel.z = sel.x;
-        sel.x = tmp;
-    }
-
-    if (sel.w < sel.y)
-    {
-        float tmp = sel.w;
-        sel.w = sel.y;
-        sel.y = tmp;
-    }
-
-    pass_uniform("selection", sel);
-    pass_uniform("active_selection", active_selection);
-    pass_uniform("time", (float)glfwGetTime());
-    glClear(GL_COLOR_BUFFER_BIT);
-    glDrawArrays(GL_POINTS, 0, particles_count);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbos[flip]);
+    flip = !flip;
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, ssbos[flip]);
 }
 
 void load_particles()
@@ -301,12 +278,7 @@ void spawn_particles()
     delete[] new_particles;
 
     // so, previously up-to-date buffer currently is not up-to-date
-    // flip buffer binding points
-    {
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbos[flip]);
-        flip = !flip;
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, ssbos[flip]);
-    }
+    swap_particles_buffers();
 
     particles_count += spawn_amount;
 
@@ -661,14 +633,37 @@ int main()
     {
         // render particles
         {
-            render();
+            vec4 sel(
+                map_coord_from(selection_start.x, shift.x, WINDOW_WIDTH),
+                map_coord_from(selection_start.y, shift.y, WINDOW_HEIGHT),
+                map_coord_from(prev_mouse_pos.x, shift.x, WINDOW_WIDTH),
+                map_coord_from(prev_mouse_pos.y, shift.y, WINDOW_HEIGHT)
+            );
+
+            if (sel.z < sel.x)
+            {
+                float tmp = sel.z;
+                sel.z = sel.x;
+                sel.x = tmp;
+            }
+
+            if (sel.w < sel.y)
+            {
+                float tmp = sel.w;
+                sel.w = sel.y;
+                sel.y = tmp;
+            }
+
+            pass_uniform("selection", sel);
+            pass_uniform("active_selection", active_selection);
+            pass_uniform("time", (float)glfwGetTime());
+            glClear(GL_COLOR_BUFFER_BIT);
+            glDrawArrays(GL_POINTS, 0, particles_count);
 
             if ((play) && (glfwGetTime() - prev_t >= 1.0 / fps_limit))
             {
                 prev_t = glfwGetTime();
-                glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbos[flip]);
-                flip = !flip;
-                glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, ssbos[flip]);
+                swap_particles_buffers();
             }
         }
 
