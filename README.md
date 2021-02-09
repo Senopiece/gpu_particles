@@ -11,27 +11,26 @@ And when you are ready to write your own shader, you can modify whole vertex sha
 
 # Usage
 #### of the latest version (1.0.1)
-Press button `1` to load vertex shader from path shaders/1.glsl
-Press button `2` to load vertex shader from path shaders/2.glsl
-and so on...
+- press button `1` to load vertex shader from path shaders/1.glsl
+- press button `2` to load vertex shader from path shaders/2.glsl
+- and so on...
 
-`ctrl+s` - save particles state
-`ctrl+l` - load particles state
-`ctrl+c` - clear
-`space`  - pause / play
+- `ctrl+s` - save particles state
+- `ctrl+l` - load particles state
+- `ctrl+c` - clear
+- `space`  - pause / play
 
-`up arrow`   - raise fps limit
-`down arrow` - reduce fps limit
+- `up arrow`   - raise fps limit
+- `down arrow` - reduce fps limit
 
-`right shift + up arrow`   - raise particles spawn amount
-`right shift + down arrow` - reduce particles spawn amount
+- `right shift + up arrow`   - raise particles spawn amount
+- `right shift + down arrow` - reduce particles spawn amount
 
-`left shift + up arrow`   - raise particles spawn radius
-`left shift + down arrow` - reduce particles spawn radius
+- `left shift + up arrow`   - raise particles spawn radius
+- `left shift + down arrow` - reduce particles spawn radius
 
-`keep pressed left mouse button and drag it to grag field (only with released shift)`
-`slide mouse wheel up or down to zoom in or out`
-`press right mouse button to spawn a bunch of particles under cursor`
-`keep pressed left mouse button with shift to select area`
-`press delete and all selected particles would be removed`
-
+- `keep pressed left mouse button and drag it to grag field (only with released shift)`
+- `slide mouse wheel up or down to zoom in or out`
+- `press right mouse button to spawn a bunch of particles under cursor`
+- `keep pressed left mouse button with shift to select area`
+- `press delete and all selected particles would be removed`
