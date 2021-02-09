@@ -3,7 +3,7 @@ This project is created on top of openGL, and is ready to execute your particle 
 The repo by itself contains only sources, but you can find the build with example shader in the release archieve.
 
 # Example of what you can create
-![there](http://s2.gifyu.com/images/video3770033f46f32a29.gif)
+![](https://s2.gifyu.com/images/ezgif.com-gif-makered7cc0794c36480e.md.gif)
 
 # How to work with it?
 So, at first you need to look at `shaders/1.glsl` and notice how shader is construced.
