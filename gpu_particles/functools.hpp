@@ -8,7 +8,7 @@ string get_content_from_file(const string filepath)
     if (!fs.is_open())
     {
         cout << ">> Cannot open file " + filepath << endl;
-        return 0;
+        return "";
     }
 
     string content;
