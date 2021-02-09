@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.30907.101
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "gpu_particles", "gpu_particles\gpu_particles.vcxproj", "{996C4756-3F3F-4EFB-BFF6-BC21CC24C67C}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		debug|x64 = debug|x64
+		release|x64 = release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{996C4756-3F3F-4EFB-BFF6-BC21CC24C67C}.debug|x64.ActiveCfg = Debug|x64
+		{996C4756-3F3F-4EFB-BFF6-BC21CC24C67C}.debug|x64.Build.0 = Debug|x64
+		{996C4756-3F3F-4EFB-BFF6-BC21CC24C67C}.release|x64.ActiveCfg = Release|x64
+		{996C4756-3F3F-4EFB-BFF6-BC21CC24C67C}.release|x64.Build.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {E87FA439-F7AB-4F23-9D3C-FA36F735997C}
+	EndGlobalSection
+EndGlobal
