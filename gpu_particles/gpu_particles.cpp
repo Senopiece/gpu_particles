@@ -261,6 +261,8 @@ void load_particles()
     fs.read(data, length);
     if (!fs)
         cout << ">> Error while reading from " + savepath << endl;
+    else if (length % 16 != 0)
+        cout << ">> Incorrect file length, load terminated" << endl;
     else
     {
         particles_count = length / 16;
@@ -401,7 +403,11 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 
             delete[] selections;
             
-            cout << ">> " << particles_count - new_particles_count  << " particles was deleted, still remains: " << new_particles_count << " particles" << endl;
+            cout << ">> ";
+            cout << particles_count - new_particles_count << " particle";
+            cout << (particles_count - new_particles_count == 1 ? "": "s");
+            cout << " was deleted, still remains " << new_particles_count << " particle";
+            cout << (new_particles_count == 1 ? "" : "s") << endl;
 
             particles_count = new_particles_count;
         }
@@ -529,8 +535,8 @@ void spawn_particles()
 
     particles_count += spawn_amount;
 
-    cout << ">> Created " << spawn_amount << " ";
-    cout << (spawn_amount == 1 ? "particle" : "particles");
+    cout << ">> Created " << spawn_amount << " particle";
+    cout << (spawn_amount == 1 ? "" : "s");
     cout << ", total: " << particles_count << endl;
 }
 
