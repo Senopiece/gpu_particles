@@ -171,7 +171,13 @@
     </BuildLog>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="gpu_particles.cpp" />
+    <ClCompile Include="main.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="conversations.hpp" />
+    <ClInclude Include="functools.hpp" />
+    <ClInclude Include="gl_wrapper.hpp" />
+    <ClInclude Include="structures.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
