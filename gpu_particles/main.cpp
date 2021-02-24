@@ -44,6 +44,8 @@ bool mouse_middle_pressed = false;
 bool left_shift_pressed = false;
 bool right_shift_pressed = false;
 
+uint takt = 0;
+
 uint spawn_amount = 100;
 float spawn_radius = 40;
 
@@ -682,8 +684,10 @@ int main()
             pass_uniform("selection", sel);
             pass_uniform("active_selection", active_selection);
             pass_uniform("time", (float)glfwGetTime());
+            pass_uniform("takt", takt);
             glClear(GL_COLOR_BUFFER_BIT);
             glDrawArrays(GL_POINTS, 0, particles_count);
+            takt++;
 
             if ((play) && (glfwGetTime() - prev_t >= 1.0 / fps_limit))
             {

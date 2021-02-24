@@ -5,6 +5,11 @@ void pass_uniform(string name, float value)
     glProgramUniform1f(cur_prog_id, glGetUniformLocation(cur_prog_id, name.c_str()), value);
 }
 
+void pass_uniform(string name, uint value)
+{
+    glProgramUniform1ui(cur_prog_id, glGetUniformLocation(cur_prog_id, name.c_str()), value);
+}
+
 void pass_uniform(string name, bool value)
 {
     glProgramUniform1ui(cur_prog_id, glGetUniformLocation(cur_prog_id, name.c_str()), value);
