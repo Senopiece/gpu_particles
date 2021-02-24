@@ -84,7 +84,7 @@ uint try_to_compile_shader(GLenum type, const string source)
     }
 }
 
-void load_and_apply_shader(uint name)
+void load_and_apply_vertex_shader(uint name)
 {
     string path = "shaders/";
     path += char(name + 48);
@@ -127,7 +127,9 @@ void load_and_apply_shader(uint name)
         // enable program
         {
             if (cur_prog_id != 0)
+            {
                 glDeleteProgram(cur_prog_id);
+            }
             cur_prog_id = program_id;
             glUseProgram(cur_prog_id);
         }
@@ -178,9 +180,13 @@ void load_particles()
 
     fs.read(data, length);
     if (!fs)
+    {
         cout << ">> Error while reading from " + savepath << endl;
+    }
     else if (length % 16 != 0)
+    {
         cout << ">> Incorrect file length, load terminated" << endl;
+    }
     else
     {
         particles_count = length / 16;
@@ -225,7 +231,9 @@ void save_particles()
 
     fs.write(data, particles_count * sizeof(particle));
     if (!fs)
+    {
         cout << ">> Error while writing to " + savepath << endl;
+    }
     fs.close();
 
     delete[] data;
@@ -292,30 +300,46 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
     if (key == GLFW_KEY_LEFT_CONTROL)
     {
         if (action == GLFW_PRESS)
+        {
             left_ctrl_pressed = true;
+        }
         else if (action == GLFW_RELEASE)
+        {
             left_ctrl_pressed = false;
+        }
     }
     else if (key == GLFW_KEY_RIGHT_CONTROL)
     {
         if (action == GLFW_PRESS)
+        {
             right_ctrl_pressed = true;
+        }
         else if (action == GLFW_RELEASE)
+        {
             right_ctrl_pressed = false;
+        }
     }
     else if (key == GLFW_KEY_LEFT_SHIFT)
     {
         if (action == GLFW_PRESS)
+        {
             left_shift_pressed = true;
+        }
         else if (action == GLFW_RELEASE)
+        {
             left_shift_pressed = false;
+        }
     }
     else if (key == GLFW_KEY_RIGHT_SHIFT)
     {
         if (action == GLFW_PRESS)
+        {
             right_shift_pressed = true;
+        }
         else if (action == GLFW_RELEASE)
+        {
             right_shift_pressed = false;
+        }
     }
     else if (action == GLFW_PRESS)
     {
@@ -398,7 +422,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
         }
         else if ((key >= GLFW_KEY_0) && (key <= GLFW_KEY_9))
         {
-            load_and_apply_shader(key - GLFW_KEY_0);
+            load_and_apply_vertex_shader(key - GLFW_KEY_0);
         }
         else if ((key == GLFW_KEY_UP) || (key == GLFW_KEY_DOWN))
         {
@@ -595,7 +619,7 @@ int main()
                 GL_FRAGMENT_SHADER, 
                 "#version 330 core\nin vec4 pixel_color;\nout vec4 color;\nvoid main(){color = vec4(pixel_color);}"
             );
-            load_and_apply_shader(1);
+            load_and_apply_vertex_shader(1);
         }
 
         // buffers init
@@ -607,7 +631,7 @@ int main()
             glGenBuffers(1, &selections_buffer);
             glBindBuffer(GL_SHADER_STORAGE_BUFFER, selections_buffer);
             uint* data = new uint[particles_count]();
-            glBufferData(GL_SHADER_STORAGE_BUFFER, particles_count * 4, data, GL_DYNAMIC_COPY);
+            glBufferData(GL_SHADER_STORAGE_BUFFER, particles_count * sizeof(uint), data, GL_DYNAMIC_COPY);
             delete[] data;
             glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, selections_buffer);
             glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
@@ -623,6 +647,7 @@ int main()
             glEnable(GL_BLEND);
             glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
             glPolygonMode(GL_FRONT, GL_FILL);
+            glEnable(GL_PROGRAM_POINT_SIZE);
         }
     }
 
@@ -752,7 +777,9 @@ int main()
             }
         }
         else
+        {
             active_selection = false;
+        }
     }
 
     glDeleteBuffers(2, ssbos);
