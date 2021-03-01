@@ -46,7 +46,7 @@ bool right_shift_pressed = false;
 
 uint takt = 0;
 
-uint spawn_amount = 100;
+int spawn_amount = 100;
 float spawn_radius = 40;
 
 #include "conversations.hpp"
