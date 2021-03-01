@@ -29,7 +29,7 @@ bool flip = true;
 float fps_limit = 60;
 float scale = 1;
 vec2 shift;
-vec2 prev_mouse_pos;
+vec2 mouse_pos;
 vec2 selection_start;
 bool active_selection = false;
 
@@ -147,8 +147,8 @@ void load_and_apply_vertex_shader(uint name)
             pass_uniform(
                 "mouse_pos",
                 vec2(
-                    map_coord_from(prev_mouse_pos.x, shift.x, WINDOW_WIDTH),
-                    map_coord_from(prev_mouse_pos.y, shift.y, WINDOW_HEIGHT)
+                    map_coord_from(mouse_pos.x, shift.x, WINDOW_WIDTH),
+                    map_coord_from(mouse_pos.y, shift.y, WINDOW_HEIGHT)
                 )
             );
         }
@@ -248,8 +248,8 @@ void spawn_particles()
     // create particles
     particle* new_particles = new particle[spawn_amount];
 
-    float px = map_coord_from(prev_mouse_pos.x, shift.x, WINDOW_WIDTH);
-    float py = map_coord_from(prev_mouse_pos.y, shift.y, WINDOW_HEIGHT);
+    float px = map_coord_from(mouse_pos.x, shift.x, WINDOW_WIDTH);
+    float py = map_coord_from(mouse_pos.y, shift.y, WINDOW_HEIGHT);
 
     for (uint i = 0; i < spawn_amount; i += 1)
     {
@@ -321,26 +321,37 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
             right_ctrl_pressed = false;
         }
     }
-    else if (key == GLFW_KEY_LEFT_SHIFT)
+    else if ((key == GLFW_KEY_LEFT_SHIFT) || (key == GLFW_KEY_RIGHT_SHIFT))
     {
         if (action == GLFW_PRESS)
         {
-            left_shift_pressed = true;
+            if (key == GLFW_KEY_LEFT_SHIFT)
+            {
+                left_shift_pressed = true;
+            }
+            else if (key == GLFW_KEY_RIGHT_SHIFT)
+            {
+                right_shift_pressed = true;
+            }
+
+            // throw selection
+            active_selection = false;
+            glBindBuffer(GL_SHADER_STORAGE_BUFFER, selections_buffer);
+            uint* zdata = new uint[particles_count]();
+            glBufferData(GL_SHADER_STORAGE_BUFFER, particles_count * sizeof(uint), zdata, GL_DYNAMIC_COPY);
+            delete zdata;
+            glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
         }
         else if (action == GLFW_RELEASE)
         {
-            left_shift_pressed = false;
-        }
-    }
-    else if (key == GLFW_KEY_RIGHT_SHIFT)
-    {
-        if (action == GLFW_PRESS)
-        {
-            right_shift_pressed = true;
-        }
-        else if (action == GLFW_RELEASE)
-        {
-            right_shift_pressed = false;
+            if (key == GLFW_KEY_LEFT_SHIFT)
+            {
+                left_shift_pressed = false;
+            }
+            else if (key == GLFW_KEY_RIGHT_SHIFT)
+            {
+                right_shift_pressed = false;
+            }
         }
     }
     else if (action == GLFW_PRESS)
@@ -475,8 +486,8 @@ void window_resize_callback(GLFWwindow* window, int width, int height)
     pass_uniform(
         "mouse_pos",
         vec2(
-            map_coord_from(prev_mouse_pos.x, shift.x, WINDOW_WIDTH),
-            map_coord_from(prev_mouse_pos.y, shift.y, WINDOW_HEIGHT)
+            map_coord_from(mouse_pos.x, shift.x, WINDOW_WIDTH),
+            map_coord_from(mouse_pos.y, shift.y, WINDOW_HEIGHT)
         )
     );
 }
@@ -512,8 +523,8 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
 
     float k = pow(1.12, -yoffset);
 
-    shift.x += scale * (mx - prev_mouse_pos.x) * (1 - k);
-    shift.y += scale * (my - prev_mouse_pos.y) * (1 - k);
+    shift.x += scale * (mx - mouse_pos.x) * (1 - k);
+    shift.y += scale * (my - mouse_pos.y) * (1 - k);
 
     scale *= k;
 
@@ -522,8 +533,8 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
     pass_uniform(
         "mouse_pos",
         vec2(
-            map_coord_from(prev_mouse_pos.x, shift.x, WINDOW_WIDTH),
-            map_coord_from(prev_mouse_pos.y, shift.y, WINDOW_HEIGHT)
+            map_coord_from(mouse_pos.x, shift.x, WINDOW_WIDTH),
+            map_coord_from(mouse_pos.y, shift.y, WINDOW_HEIGHT)
         )
     );
 }
@@ -535,8 +546,8 @@ void cursor_position_change_callback(GLFWwindow* window, double xpos, double ypo
     // drag field
     if ((mouse_left_pressed) && !(left_shift_pressed || right_shift_pressed))
     {
-        shift.x += (xpos - prev_mouse_pos.x)*scale;
-        shift.y += (ypos - prev_mouse_pos.y)*scale;
+        shift.x += (xpos - mouse_pos.x)*scale;
+        shift.y += (ypos - mouse_pos.y)*scale;
         pass_uniform("shift", shift);
     }
 
@@ -546,14 +557,14 @@ void cursor_position_change_callback(GLFWwindow* window, double xpos, double ypo
         spawn_particles();
     }
 
-    prev_mouse_pos.x = xpos;
-    prev_mouse_pos.y = ypos;
+    mouse_pos.x = xpos;
+    mouse_pos.y = ypos;
 
     pass_uniform(
         "mouse_pos",
         vec2(
-            map_coord_from(prev_mouse_pos.x, shift.x, WINDOW_WIDTH),
-            map_coord_from(prev_mouse_pos.y, shift.y, WINDOW_HEIGHT)
+            map_coord_from(mouse_pos.x, shift.x, WINDOW_WIDTH),
+            map_coord_from(mouse_pos.y, shift.y, WINDOW_HEIGHT)
         )
     );
 }
@@ -589,7 +600,7 @@ int main()
 
         double xtmp, ytmp;
         glfwGetCursorPos(window, &xtmp, &ytmp);
-        prev_mouse_pos = vec2(xtmp, ytmp);
+        mouse_pos = vec2(xtmp, ytmp);
 
         if (window)
         {
@@ -663,8 +674,8 @@ int main()
             vec4 sel(
                 map_coord_from(selection_start.x, shift.x, WINDOW_WIDTH),
                 map_coord_from(selection_start.y, shift.y, WINDOW_HEIGHT),
-                map_coord_from(prev_mouse_pos.x, shift.x, WINDOW_WIDTH),
-                map_coord_from(prev_mouse_pos.y, shift.y, WINDOW_HEIGHT)
+                map_coord_from(mouse_pos.x, shift.x, WINDOW_WIDTH),
+                map_coord_from(mouse_pos.y, shift.y, WINDOW_HEIGHT)
             );
 
             if (sel.z < sel.x)
@@ -708,7 +719,7 @@ int main()
                     map_coord_to(selection_start.y, WINDOW_HEIGHT)
                 );
                 glVertex2f(
-                    map_coord_to(prev_mouse_pos.x, WINDOW_WIDTH),
+                    map_coord_to(mouse_pos.x, WINDOW_WIDTH),
                     map_coord_to(selection_start.y, WINDOW_HEIGHT)
                 );
 
@@ -719,27 +730,27 @@ int main()
                 );
                 glVertex2f(
                     map_coord_to(selection_start.x, WINDOW_WIDTH),
-                    map_coord_to(prev_mouse_pos.y, WINDOW_HEIGHT)
+                    map_coord_to(mouse_pos.y, WINDOW_HEIGHT)
                 );
 
                 glColor4f(0, 0.8, 1, 0.6);
                 glVertex2f(
-                    map_coord_to(prev_mouse_pos.x, WINDOW_WIDTH),
-                    map_coord_to(prev_mouse_pos.y, WINDOW_HEIGHT)
+                    map_coord_to(mouse_pos.x, WINDOW_WIDTH),
+                    map_coord_to(mouse_pos.y, WINDOW_HEIGHT)
                 );
                 glVertex2f(
-                    map_coord_to(prev_mouse_pos.x, WINDOW_WIDTH),
+                    map_coord_to(mouse_pos.x, WINDOW_WIDTH),
                     map_coord_to(selection_start.y, WINDOW_HEIGHT)
                 );
 
                 glColor4f(0, 0.8, 1, 0.6);
                 glVertex2f(
-                    map_coord_to(prev_mouse_pos.x, WINDOW_WIDTH),
-                    map_coord_to(prev_mouse_pos.y, WINDOW_HEIGHT)
+                    map_coord_to(mouse_pos.x, WINDOW_WIDTH),
+                    map_coord_to(mouse_pos.y, WINDOW_HEIGHT)
                 );
                 glVertex2f(
                     map_coord_to(selection_start.x, WINDOW_WIDTH),
-                    map_coord_to(prev_mouse_pos.y, WINDOW_HEIGHT)
+                    map_coord_to(mouse_pos.y, WINDOW_HEIGHT)
                 );
             }
             glEnd();
@@ -753,14 +764,14 @@ int main()
                 );
                 glVertex2f(
                     map_coord_to(selection_start.x, WINDOW_WIDTH),
-                    map_coord_to(prev_mouse_pos.y, WINDOW_HEIGHT)
+                    map_coord_to(mouse_pos.y, WINDOW_HEIGHT)
                 );
                 glVertex2f(
-                    map_coord_to(prev_mouse_pos.x, WINDOW_WIDTH),
-                    map_coord_to(prev_mouse_pos.y, WINDOW_HEIGHT)
+                    map_coord_to(mouse_pos.x, WINDOW_WIDTH),
+                    map_coord_to(mouse_pos.y, WINDOW_HEIGHT)
                 );
                 glVertex2f(
-                    map_coord_to(prev_mouse_pos.x, WINDOW_WIDTH),
+                    map_coord_to(mouse_pos.x, WINDOW_WIDTH),
                     map_coord_to(selection_start.y, WINDOW_HEIGHT)
                 );
             }
@@ -776,7 +787,7 @@ int main()
         {
             if (!active_selection)
             {
-                selection_start = prev_mouse_pos;
+                selection_start = mouse_pos;
                 active_selection = true;
             }
         }
