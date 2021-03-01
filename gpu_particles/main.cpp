@@ -504,7 +504,7 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
         mouse_right_pressed = (action == GLFW_PRESS);
         pass_uniform("mouse_right_pressed", mouse_right_pressed);
 
-        if (mouse_right_pressed)
+        if (mouse_right_pressed && (left_shift_pressed || right_shift_pressed))
         {
             spawn_particles();
         }
@@ -552,7 +552,7 @@ void cursor_position_change_callback(GLFWwindow* window, double xpos, double ypo
     }
 
     // throw particles
-    if (mouse_right_pressed)
+    if (mouse_right_pressed && (left_shift_pressed || right_shift_pressed))
     {
         spawn_particles();
     }
