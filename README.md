@@ -30,5 +30,5 @@ And when you are ready to write your own shader, you can modify whole vertex sha
 - `(delete) remove selected`
 - `(shift) show spawn prediction`
 - `(left mouse button + shift) spawn particles`
-- `(right mouse button + shift + vertical drag) change spawn radius`
-- `(right mouse button + shift + horizontal drag) change spawn dencity`
+- `(wheel + shift) change spawn radius`
+- `(right mouse button + shift) change spawn dencity`

@@ -31,7 +31,7 @@ float scale = 1;
 vec2 shift;
 vec2 mouse_pos; // fixed when cursor in 'disabled' mode, but you can get actual position of the cursor through glfwGetCursorPos 
 vec2 selection_start;
-vec2 anchor = vec2(-1, 0);
+float anchor_x = -1;
 bool active_selection = false;
 
 bool left_ctrl_pressed = false;
@@ -454,25 +454,32 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
 {
-    float mx = WINDOW_WIDTH * 0.5f;
-    float my = WINDOW_HEIGHT * 0.5f;
-
     float k = pow(1.12, -yoffset);
 
-    shift.x += scale * (mx - mouse_pos.x) * (1 - k);
-    shift.y += scale * (my - mouse_pos.y) * (1 - k);
+    if (left_shift_pressed || right_shift_pressed)
+    {
+        spawn_radius *= k;
+    }
+    else
+    {
+        float mx = WINDOW_WIDTH * 0.5f;
+        float my = WINDOW_HEIGHT * 0.5f;
 
-    scale *= k;
+        shift.x += scale * (mx - mouse_pos.x) * (1 - k);
+        shift.y += scale * (my - mouse_pos.y) * (1 - k);
 
-    pass_uniform("scale", scale);
-    pass_uniform("shift", shift);
-    pass_uniform(
-        "mouse_pos",
-        vec2(
-            map_coord_from(mouse_pos.x, shift.x, WINDOW_WIDTH),
-            map_coord_from(mouse_pos.y, shift.y, WINDOW_HEIGHT)
-        )
-    );
+        scale *= k;
+
+        pass_uniform("scale", scale);
+        pass_uniform("shift", shift);
+        pass_uniform(
+            "mouse_pos",
+            vec2(
+                map_coord_from(mouse_pos.x, shift.x, WINDOW_WIDTH),
+                map_coord_from(mouse_pos.y, shift.y, WINDOW_HEIGHT)
+            )
+        );
+    }
 }
 
 void cursor_position_change_callback(GLFWwindow* window, double xpos, double ypos)
@@ -722,37 +729,26 @@ int main()
             double xtmp, ytmp;
             glfwGetCursorPos(window, &xtmp, &ytmp);
 
-            if (anchor.x == -1)
+            if (anchor_x == -1)
             {
                 glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-                anchor.x = xtmp;
-                anchor.y = ytmp;
+                anchor_x = xtmp;
             }
 
-            float dx = xtmp - anchor.x;
-            float dy = ytmp - anchor.y;
+            float d = xtmp - anchor_x;
 
-            anchor.x = xtmp;
-            anchor.y = ytmp;
+            anchor_x = xtmp;
 
-            if (dy != 0)
+            if (d != 0)
             {
-                if (spawn_radius - dy > 10)
-                    spawn_radius -= dy;
-                else
-                    spawn_radius = 10;
-            }
+                if (spawn_amount + d < 1)
+                    d = 1 - spawn_amount;
 
-            if (dx != 0)
-            {
-                if (spawn_amount + dx < 1)
-                    dx = 1 - spawn_amount;
-
-                spawn_amount += dx;
+                spawn_amount += d;
 
                 // update prepared spawn
                 vec2* new_prepared_spawn = new vec2[spawn_amount];
-                if (dx < 0)
+                if (d < 0)
                 {
                     // cut prepared spawn
                     for (uint i = 0; i < spawn_amount; i++)
@@ -763,12 +759,12 @@ int main()
                 else
                 {
                     // copy whole prepared spawn
-                    for (uint i = 0; i < spawn_amount - dx; i++)
+                    for (uint i = 0; i < spawn_amount - d; i++)
                         new_prepared_spawn[i] = prepared_spawn[i];
                     delete[] prepared_spawn;
 
                     // add new elements
-                    for (uint i = spawn_amount - dx; i < spawn_amount; i++)
+                    for (uint i = spawn_amount - d; i < spawn_amount; i++)
                     {
                         float angle = float(rand()) * 6.2831 / RAND_MAX;
                         float dist = sqrt(float(rand()) / RAND_MAX);
@@ -783,10 +779,10 @@ int main()
                 }
             }
         }
-        else if (anchor.x != -1)
+        else if (anchor_x != -1)
         {
             glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-            anchor.x = -1;
+            anchor_x = -1;
         }
 
         // selection
