@@ -491,31 +491,11 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
     {
         mouse_left_pressed = (action == GLFW_PRESS);
         pass_uniform("mouse_left_pressed", mouse_left_pressed);
-
-        if (mouse_left_pressed && (right_shift_pressed || left_shift_pressed))
-        {
-            spawn_particles();
-        }
     }
     else if (button == GLFW_MOUSE_BUTTON_RIGHT)
     {
         mouse_right_pressed = (action == GLFW_PRESS);
         pass_uniform("mouse_right_pressed", mouse_right_pressed);
-
-        if (mouse_right_pressed && (left_shift_pressed || right_shift_pressed))
-        {
-
-        }
-        if (mouse_right_pressed)
-        {
-            // throw selection
-            /*active_selection = false;
-            glBindBuffer(GL_SHADER_STORAGE_BUFFER, selections_buffer);
-            uint* zdata = new uint[particles_count]();
-            glBufferData(GL_SHADER_STORAGE_BUFFER, particles_count * sizeof(uint), zdata, GL_DYNAMIC_COPY);
-            delete zdata;
-            glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);*/
-        }
     }
     else if (button == GLFW_MOUSE_BUTTON_MIDDLE)
     {
@@ -557,12 +537,6 @@ void cursor_position_change_callback(GLFWwindow* window, double xpos, double ypo
         shift.x += (xpos - mouse_pos.x)*scale;
         shift.y += (ypos - mouse_pos.y)*scale;
         pass_uniform("shift", shift);
-    }
-
-    // throw particles
-    if (mouse_right_pressed && (left_shift_pressed || right_shift_pressed))
-    {
-        spawn_particles();
     }
 
     mouse_pos.x = xpos;
@@ -803,6 +777,12 @@ int main()
         else
         {
             active_selection = false;
+        }
+
+        // throw particles
+        if (mouse_left_pressed && (left_shift_pressed || right_shift_pressed))
+        {
+            spawn_particles();
         }
     }
 
