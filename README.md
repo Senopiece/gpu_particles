@@ -10,7 +10,7 @@ So, at first you need to look at `shaders/1.glsl` and notice how shader is const
 And when you are ready to write your own shader, you can modify whole vertex shader, but in most cases it is recommended to write custom code only in `mutable section`.
 
 # Usage
-#### of the latest version (1.0.1)
+#### of the latest version
 - press button `1` to load vertex shader from path shaders/1.glsl
 - press button `2` to load vertex shader from path shaders/2.glsl
 - and so on...
@@ -23,14 +23,12 @@ And when you are ready to write your own shader, you can modify whole vertex sha
 - `up arrow`   - raise fps limit
 - `down arrow` - reduce fps limit
 
-- `right shift + up arrow`   - raise particles spawn amount
-- `right shift + down arrow` - reduce particles spawn amount
-
-- `left shift + up arrow`   - raise particles spawn radius
-- `left shift + down arrow` - reduce particles spawn radius
-
-- `keep pressed left mouse button and drag it to grag field (only with released shift)`
-- `slide mouse wheel up or down to zoom in or out`
-- `press right mouse button to spawn a bunch of particles under cursor`
-- `keep pressed left mouse button with shift to select area`
-- `press delete and all selected particles would be removed`
+- `(mouse wheel) zoom`
+- `(left mouse button) drag field`
+- `(left mouse button + any particles selected) drag selected`
+- `(right mouse button) select area`
+- `(delete) remove selected`
+- `(shift) show spawn prediction`
+- `(left mouse button + shift) spawn particles`
+- `(right mouse button + shift + vertical drag) change spawn radius`
+- `(right mouse button + shift + horizontal drag) change spawn dencity`

@@ -49,6 +49,8 @@ uint takt = 0;
 int spawn_amount = 100;
 float spawn_radius = 40;
 
+vec2* prepared_spawn = new vec2[spawn_amount];
+
 #include "conversations.hpp"
 #include "gl_wrapper.hpp"
 #include "functools.hpp"
@@ -243,6 +245,23 @@ void save_particles()
     cout << ">> Particles saved successfully" << endl;
 }
 
+void update_prepared_spawn()
+{
+    delete[] prepared_spawn;
+    prepared_spawn = new vec2[spawn_amount];
+
+    for (uint i = 0; i < spawn_amount; i += 1)
+    {
+        float angle = float(rand()) * 6.2831 / RAND_MAX;
+        float dist = spawn_radius * sqrt(float(rand()) / RAND_MAX);
+
+        prepared_spawn[i] = vec2(
+            cosf(angle) * dist,
+            sinf(angle) * dist
+        );
+    }
+}
+
 void spawn_particles()
 {
     // create particles
@@ -253,16 +272,15 @@ void spawn_particles()
 
     for (uint i = 0; i < spawn_amount; i += 1)
     {
-        float angle = float(rand()) * 6.2831 / RAND_MAX;
-        float dist = spawn_radius * sqrt(float(rand()) / RAND_MAX);
-
         new_particles[i] = vec4(
-            px + cosf(angle) * dist,
-            py + sinf(angle) * dist,
+            px + prepared_spawn[i].x,
+            py + prepared_spawn[i].y,
             0,
             0
         );
     }
+
+    update_prepared_spawn();
 
     // update capacity of the both buffers and
     // fill not up-to-date buffer with information from another buffer and add new particles in the end
@@ -333,14 +351,6 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
             {
                 right_shift_pressed = true;
             }
-
-            // throw selection
-            active_selection = false;
-            glBindBuffer(GL_SHADER_STORAGE_BUFFER, selections_buffer);
-            uint* zdata = new uint[particles_count]();
-            glBufferData(GL_SHADER_STORAGE_BUFFER, particles_count * sizeof(uint), zdata, GL_DYNAMIC_COPY);
-            delete zdata;
-            glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
         }
         else if (action == GLFW_RELEASE)
         {
@@ -439,27 +449,10 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
         }
         else if ((key == GLFW_KEY_UP) || (key == GLFW_KEY_DOWN))
         {
-            if (right_shift_pressed)
-            {
-                spawn_amount += 3 * ((key == GLFW_KEY_UP) * 2 - 1);
-                if (spawn_amount <= 0)
-                    spawn_amount = 1;
-                cout << ">> Spawn amount: " << spawn_amount << endl;
-            }
-            else if (left_shift_pressed)
-            {
-                spawn_radius += 5 * ((key == GLFW_KEY_UP) * 2 - 1);
-                if (spawn_radius <= 0)
-                    spawn_radius = 0;
-                cout << ">> Spawn radius: " << spawn_radius << endl;
-            }
-            else
-            {
-                fps_limit += 5 * ((key == GLFW_KEY_UP) * 2 - 1);
-                if (fps_limit <= 0)
-                    fps_limit = 1;
-                cout << ">> FPS limit: " << fps_limit << endl;
-            }
+            fps_limit += 5 * ((key == GLFW_KEY_UP) * 2 - 1);
+            if (fps_limit <= 0)
+                fps_limit = 1;
+            cout << ">> FPS limit: " << fps_limit << endl;
         }
         else if (left_ctrl_pressed || right_ctrl_pressed)
         {
@@ -498,6 +491,11 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
     {
         mouse_left_pressed = (action == GLFW_PRESS);
         pass_uniform("mouse_left_pressed", mouse_left_pressed);
+
+        if (mouse_left_pressed && (right_shift_pressed || left_shift_pressed))
+        {
+            spawn_particles();
+        }
     }
     else if (button == GLFW_MOUSE_BUTTON_RIGHT)
     {
@@ -506,7 +504,17 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 
         if (mouse_right_pressed && (left_shift_pressed || right_shift_pressed))
         {
-            spawn_particles();
+
+        }
+        if (mouse_right_pressed)
+        {
+            // throw selection
+            /*active_selection = false;
+            glBindBuffer(GL_SHADER_STORAGE_BUFFER, selections_buffer);
+            uint* zdata = new uint[particles_count]();
+            glBufferData(GL_SHADER_STORAGE_BUFFER, particles_count * sizeof(uint), zdata, GL_DYNAMIC_COPY);
+            delete zdata;
+            glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);*/
         }
     }
     else if (button == GLFW_MOUSE_BUTTON_MIDDLE)
@@ -662,6 +670,8 @@ int main()
             glPolygonMode(GL_FRONT, GL_FILL);
             glEnable(GL_PROGRAM_POINT_SIZE);
         }
+
+        update_prepared_spawn();
     }
 
     double prev_t = glfwGetTime();
@@ -707,75 +717,74 @@ int main()
             }
         }
 
-        // render selection box
+        // fallback to manual operation
         glUseProgram(0);
-        if (active_selection)
         {
-            glBegin(GL_LINES);
+            if (left_shift_pressed || right_shift_pressed)
             {
-                glColor4f(0, 0.8, 1, 0.6);
-                glVertex2f(
-                    map_coord_to(selection_start.x, WINDOW_WIDTH),
-                    map_coord_to(selection_start.y, WINDOW_HEIGHT)
-                );
-                glVertex2f(
-                    map_coord_to(mouse_pos.x, WINDOW_WIDTH),
-                    map_coord_to(selection_start.y, WINDOW_HEIGHT)
-                );
+                // render spawn circle
+                draw_circle(mouse_pos, spawn_radius/scale, 36, vec4(1, 1, 1, 1));
 
-                glColor4f(0, 0.8, 1, 0.6);
-                glVertex2f(
-                    map_coord_to(selection_start.x, WINDOW_WIDTH),
-                    map_coord_to(selection_start.y, WINDOW_HEIGHT)
-                );
-                glVertex2f(
-                    map_coord_to(selection_start.x, WINDOW_WIDTH),
-                    map_coord_to(mouse_pos.y, WINDOW_HEIGHT)
-                );
-
-                glColor4f(0, 0.8, 1, 0.6);
-                glVertex2f(
-                    map_coord_to(mouse_pos.x, WINDOW_WIDTH),
-                    map_coord_to(mouse_pos.y, WINDOW_HEIGHT)
-                );
-                glVertex2f(
-                    map_coord_to(mouse_pos.x, WINDOW_WIDTH),
-                    map_coord_to(selection_start.y, WINDOW_HEIGHT)
-                );
-
-                glColor4f(0, 0.8, 1, 0.6);
-                glVertex2f(
-                    map_coord_to(mouse_pos.x, WINDOW_WIDTH),
-                    map_coord_to(mouse_pos.y, WINDOW_HEIGHT)
-                );
-                glVertex2f(
-                    map_coord_to(selection_start.x, WINDOW_WIDTH),
-                    map_coord_to(mouse_pos.y, WINDOW_HEIGHT)
-                );
+                // render density representation
+                glBegin(GL_POINTS);
+                glColor4f(1, 1, 1, 1);
+                for (uint i = 0; i < spawn_amount; i++)
+                {
+                    glVertex2f(
+                        map_coord_to(mouse_pos.x + prepared_spawn[i].x/scale, WINDOW_WIDTH),
+                        map_coord_to(mouse_pos.y + prepared_spawn[i].y/scale, WINDOW_HEIGHT)
+                    );
+                }
+                glEnd();
             }
-            glEnd();
 
-            glBegin(GL_QUADS);
+            // render selection box
+            if (active_selection)
             {
-                glColor4f(0, 0.8, 1, 0.05);
-                glVertex2f(
-                    map_coord_to(selection_start.x, WINDOW_WIDTH),
-                    map_coord_to(selection_start.y, WINDOW_HEIGHT)
-                );
-                glVertex2f(
-                    map_coord_to(selection_start.x, WINDOW_WIDTH),
-                    map_coord_to(mouse_pos.y, WINDOW_HEIGHT)
-                );
-                glVertex2f(
-                    map_coord_to(mouse_pos.x, WINDOW_WIDTH),
-                    map_coord_to(mouse_pos.y, WINDOW_HEIGHT)
-                );
-                glVertex2f(
-                    map_coord_to(mouse_pos.x, WINDOW_WIDTH),
-                    map_coord_to(selection_start.y, WINDOW_HEIGHT)
-                );
+                glBegin(GL_LINE_LOOP);
+                {
+                    glColor4f(0, 0.8, 1, 0.6);
+                    glVertex2f(
+                        map_coord_to(selection_start.x, WINDOW_WIDTH),
+                        map_coord_to(selection_start.y, WINDOW_HEIGHT)
+                    );
+                    glVertex2f(
+                        map_coord_to(selection_start.x, WINDOW_WIDTH),
+                        map_coord_to(mouse_pos.y, WINDOW_HEIGHT)
+                    );
+                    glVertex2f(
+                        map_coord_to(mouse_pos.x, WINDOW_WIDTH),
+                        map_coord_to(mouse_pos.y, WINDOW_HEIGHT)
+                    );
+                    glVertex2f(
+                        map_coord_to(mouse_pos.x, WINDOW_WIDTH),
+                        map_coord_to(selection_start.y, WINDOW_HEIGHT)
+                    );
+                }
+                glEnd();
+
+                glBegin(GL_QUADS);
+                {
+                    glColor4f(0, 0.8, 1, 0.05);
+                    glVertex2f(
+                        map_coord_to(selection_start.x, WINDOW_WIDTH),
+                        map_coord_to(selection_start.y, WINDOW_HEIGHT)
+                    );
+                    glVertex2f(
+                        map_coord_to(selection_start.x, WINDOW_WIDTH),
+                        map_coord_to(mouse_pos.y, WINDOW_HEIGHT)
+                    );
+                    glVertex2f(
+                        map_coord_to(mouse_pos.x, WINDOW_WIDTH),
+                        map_coord_to(mouse_pos.y, WINDOW_HEIGHT)
+                    );
+                    glVertex2f(
+                        map_coord_to(mouse_pos.x, WINDOW_WIDTH),
+                        map_coord_to(selection_start.y, WINDOW_HEIGHT)
+                    );
+                }
+                glEnd();
             }
-            glEnd();
         }
         glUseProgram(cur_prog_id);
 
@@ -783,7 +792,7 @@ int main()
         glfwPollEvents();
 
         // check for start selection
-        if ((left_shift_pressed || right_shift_pressed) && (mouse_left_pressed))
+        if (!(left_shift_pressed || right_shift_pressed) && mouse_right_pressed)
         {
             if (!active_selection)
             {
