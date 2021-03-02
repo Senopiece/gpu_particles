@@ -2,6 +2,7 @@
 #include <GL/glew.h>
 #include <glfw3.h>
 #include <iostream>
+#include <vector>
 
 typedef unsigned int uint;
 using namespace std;
@@ -488,12 +489,49 @@ void cursor_position_change_callback(GLFWwindow* window, double xpos, double ypo
     {
         ypos = WINDOW_HEIGHT - ypos; // convert coordinate system
 
-        // drag field
         if (mouse_left_pressed && !(left_shift_pressed || right_shift_pressed))
         {
-            shift.x += (xpos - mouse_pos.x) * scale;
-            shift.y += (ypos - mouse_pos.y) * scale;
-            pass_uniform("shift", shift);
+            glBindBuffer(GL_SHADER_STORAGE_BUFFER, selections_buffer);
+
+            vector<uint> selected;
+
+            // retrive selected
+            {
+                uint* data = new uint[particles_count];
+                glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, particles_count * sizeof(uint), data);
+                for (uint i = 0; i < particles_count; i++)
+                {
+                    if (data[i])
+                    {
+                        selected.push_back(i);
+                    }
+                }
+                delete[] data;
+            }
+
+            if (selected.empty())
+            {
+                // drag field
+                shift.x += (xpos - mouse_pos.x) * scale;
+                shift.y += (ypos - mouse_pos.y) * scale;
+                pass_uniform("shift", shift);
+            }
+            else
+            {
+                // drag selected
+                particle* data = new particle[particles_count];
+                glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbos[!flip]);
+                glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, particles_count * sizeof(particle), data);
+                for (uint const& i : selected)
+                {
+                    data[i].x += (xpos - mouse_pos.x) * scale;
+                    data[i].y += (ypos - mouse_pos.y) * scale;
+                }
+                glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, particles_count * sizeof(particle), data);
+                delete[] data;
+            }
+
+            glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
         }
 
         mouse_pos.x = xpos;
