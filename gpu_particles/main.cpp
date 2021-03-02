@@ -29,8 +29,9 @@ bool flip = true;
 float fps_limit = 60;
 float scale = 1;
 vec2 shift;
-vec2 mouse_pos;
+vec2 mouse_pos; // fixed when cursor in 'disabled' mode, but you can get actual position of the cursor through glfwGetCursorPos 
 vec2 selection_start;
+vec2 anchor = vec2(-1, 0);
 bool active_selection = false;
 
 bool left_ctrl_pressed = false;
@@ -250,69 +251,16 @@ void update_prepared_spawn()
     delete[] prepared_spawn;
     prepared_spawn = new vec2[spawn_amount];
 
-    for (uint i = 0; i < spawn_amount; i += 1)
+    for (uint i = 0; i < spawn_amount; i++)
     {
         float angle = float(rand()) * 6.2831 / RAND_MAX;
-        float dist = spawn_radius * sqrt(float(rand()) / RAND_MAX);
+        float dist = sqrt(float(rand()) / RAND_MAX);
 
         prepared_spawn[i] = vec2(
             cosf(angle) * dist,
             sinf(angle) * dist
         );
     }
-}
-
-void spawn_particles()
-{
-    // create particles
-    particle* new_particles = new particle[spawn_amount];
-
-    float px = map_coord_from(mouse_pos.x, shift.x, WINDOW_WIDTH);
-    float py = map_coord_from(mouse_pos.y, shift.y, WINDOW_HEIGHT);
-
-    for (uint i = 0; i < spawn_amount; i += 1)
-    {
-        new_particles[i] = vec4(
-            px + prepared_spawn[i].x,
-            py + prepared_spawn[i].y,
-            0,
-            0
-        );
-    }
-
-    update_prepared_spawn();
-
-    // update capacity of the both buffers and
-    // fill not up-to-date buffer with information from another buffer and add new particles in the end
-    {
-        glBindBuffer(GL_COPY_WRITE_BUFFER, ssbos[flip]);
-        glBindBuffer(GL_COPY_READ_BUFFER, ssbos[!flip]);
-
-        glBufferData(GL_COPY_WRITE_BUFFER, (particles_count + spawn_amount) * sizeof(particle), 0, GL_DYNAMIC_COPY);
-        glCopyBufferSubData(GL_COPY_READ_BUFFER, GL_COPY_WRITE_BUFFER, 0, 0, particles_count * sizeof(particle));
-        glBufferSubData(GL_COPY_WRITE_BUFFER, particles_count * sizeof(particle), spawn_amount * sizeof(particle), new_particles);
-        glBufferData(GL_COPY_READ_BUFFER, (particles_count + spawn_amount) * sizeof(particle), 0, GL_DYNAMIC_COPY);
-
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, selections_buffer);
-        uint* data = new uint[particles_count + spawn_amount]();
-        glBufferData(GL_SHADER_STORAGE_BUFFER, (particles_count + spawn_amount) * sizeof(uint), data, GL_DYNAMIC_COPY);
-        delete[] data;
-
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
-        glBindBuffer(GL_COPY_WRITE_BUFFER, 0);
-        glBindBuffer(GL_COPY_READ_BUFFER, 0);
-    }
-
-    delete[] new_particles;
-
-    // so, previously up-to-date buffer currently is not up-to-date
-    swap_particles_buffers();
-
-    particles_count += spawn_amount;
-
-    cout << ">> Created " << spawn_amount << " particle";
-    cout << (spawn_amount == 1 ? "" : "s");
-    cout << ", total: " << particles_count << endl;
 }
 
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
@@ -529,26 +477,29 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
 
 void cursor_position_change_callback(GLFWwindow* window, double xpos, double ypos)
 {
-    ypos = WINDOW_HEIGHT - ypos; // convert coordinate system
-
-    // drag field
-    if ((mouse_left_pressed) && !(left_shift_pressed || right_shift_pressed))
+    if (!(mouse_right_pressed && (left_shift_pressed || right_shift_pressed)))
     {
-        shift.x += (xpos - mouse_pos.x)*scale;
-        shift.y += (ypos - mouse_pos.y)*scale;
-        pass_uniform("shift", shift);
+        ypos = WINDOW_HEIGHT - ypos; // convert coordinate system
+
+        // drag field
+        if (mouse_left_pressed && !(left_shift_pressed || right_shift_pressed))
+        {
+            shift.x += (xpos - mouse_pos.x) * scale;
+            shift.y += (ypos - mouse_pos.y) * scale;
+            pass_uniform("shift", shift);
+        }
+
+        mouse_pos.x = xpos;
+        mouse_pos.y = ypos;
+
+        pass_uniform(
+            "mouse_pos",
+            vec2(
+                map_coord_from(mouse_pos.x, shift.x, WINDOW_WIDTH),
+                map_coord_from(mouse_pos.y, shift.y, WINDOW_HEIGHT)
+            )
+        );
     }
-
-    mouse_pos.x = xpos;
-    mouse_pos.y = ypos;
-
-    pass_uniform(
-        "mouse_pos",
-        vec2(
-            map_coord_from(mouse_pos.x, shift.x, WINDOW_WIDTH),
-            map_coord_from(mouse_pos.y, shift.y, WINDOW_HEIGHT)
-        )
-    );
 }
 
 void endwords()
@@ -697,7 +648,7 @@ int main()
             if (left_shift_pressed || right_shift_pressed)
             {
                 // render spawn circle
-                draw_circle(mouse_pos, spawn_radius/scale, 36, vec4(1, 1, 1, 1));
+                draw_circle(mouse_pos, spawn_radius / scale, 36, vec4(1, 1, 1, 1));
 
                 // render density representation
                 glBegin(GL_POINTS);
@@ -705,8 +656,8 @@ int main()
                 for (uint i = 0; i < spawn_amount; i++)
                 {
                     glVertex2f(
-                        map_coord_to(mouse_pos.x + prepared_spawn[i].x/scale, WINDOW_WIDTH),
-                        map_coord_to(mouse_pos.y + prepared_spawn[i].y/scale, WINDOW_HEIGHT)
+                        map_coord_to(mouse_pos.x + prepared_spawn[i].x * spawn_radius / scale, WINDOW_WIDTH),
+                        map_coord_to(mouse_pos.y + prepared_spawn[i].y * spawn_radius / scale, WINDOW_HEIGHT)
                     );
                 }
                 glEnd();
@@ -765,7 +716,80 @@ int main()
         glfwSwapBuffers(window);
         glfwPollEvents();
 
-        // check for start selection
+        // change spawn properties
+        if (mouse_right_pressed && (left_shift_pressed || right_shift_pressed))
+        {
+            double xtmp, ytmp;
+            glfwGetCursorPos(window, &xtmp, &ytmp);
+
+            if (anchor.x == -1)
+            {
+                glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+                anchor.x = xtmp;
+                anchor.y = ytmp;
+            }
+
+            float dx = xtmp - anchor.x;
+            float dy = ytmp - anchor.y;
+
+            anchor.x = xtmp;
+            anchor.y = ytmp;
+
+            if (dy != 0)
+            {
+                if (spawn_radius - dy > 10)
+                    spawn_radius -= dy;
+                else
+                    spawn_radius = 10;
+            }
+
+            if (dx != 0)
+            {
+                if (spawn_amount + dx < 1)
+                    dx = 1 - spawn_amount;
+
+                spawn_amount += dx;
+
+                // update prepared spawn
+                vec2* new_prepared_spawn = new vec2[spawn_amount];
+                if (dx < 0)
+                {
+                    // cut prepared spawn
+                    for (uint i = 0; i < spawn_amount; i++)
+                        new_prepared_spawn[i] = prepared_spawn[i];
+                    delete[] prepared_spawn;
+                    prepared_spawn = new_prepared_spawn;
+                }
+                else
+                {
+                    // copy whole prepared spawn
+                    for (uint i = 0; i < spawn_amount - dx; i++)
+                        new_prepared_spawn[i] = prepared_spawn[i];
+                    delete[] prepared_spawn;
+
+                    // add new elements
+                    for (uint i = spawn_amount - dx; i < spawn_amount; i++)
+                    {
+                        float angle = float(rand()) * 6.2831 / RAND_MAX;
+                        float dist = sqrt(float(rand()) / RAND_MAX);
+
+                        new_prepared_spawn[i] = vec2(
+                            cosf(angle) * dist,
+                            sinf(angle) * dist
+                        );
+                    }
+
+                    prepared_spawn = new_prepared_spawn;
+                }
+            }
+        }
+        else if (anchor.x != -1)
+        {
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+            anchor.x = -1;
+        }
+
+        // selection
         if (!(left_shift_pressed || right_shift_pressed) && mouse_right_pressed)
         {
             if (!active_selection)
@@ -782,7 +806,55 @@ int main()
         // throw particles
         if (mouse_left_pressed && (left_shift_pressed || right_shift_pressed))
         {
-            spawn_particles();
+            // create particles
+            particle* new_particles = new particle[spawn_amount];
+
+            float px = map_coord_from(mouse_pos.x, shift.x, WINDOW_WIDTH);
+            float py = map_coord_from(mouse_pos.y, shift.y, WINDOW_HEIGHT);
+
+            for (uint i = 0; i < spawn_amount; i++)
+            {
+                new_particles[i] = vec4(
+                    px + prepared_spawn[i].x * spawn_radius,
+                    py + prepared_spawn[i].y * spawn_radius,
+                    0,
+                    0
+                );
+            }
+
+            update_prepared_spawn();
+
+            // update capacity of the both buffers and
+            // fill not up-to-date buffer with information from another buffer and add new particles in the end
+            {
+                glBindBuffer(GL_COPY_WRITE_BUFFER, ssbos[flip]);
+                glBindBuffer(GL_COPY_READ_BUFFER, ssbos[!flip]);
+
+                glBufferData(GL_COPY_WRITE_BUFFER, (particles_count + spawn_amount) * sizeof(particle), 0, GL_DYNAMIC_COPY);
+                glCopyBufferSubData(GL_COPY_READ_BUFFER, GL_COPY_WRITE_BUFFER, 0, 0, particles_count * sizeof(particle));
+                glBufferSubData(GL_COPY_WRITE_BUFFER, particles_count * sizeof(particle), spawn_amount * sizeof(particle), new_particles);
+                glBufferData(GL_COPY_READ_BUFFER, (particles_count + spawn_amount) * sizeof(particle), 0, GL_DYNAMIC_COPY);
+
+                glBindBuffer(GL_SHADER_STORAGE_BUFFER, selections_buffer);
+                uint* data = new uint[particles_count + spawn_amount]();
+                glBufferData(GL_SHADER_STORAGE_BUFFER, (particles_count + spawn_amount) * sizeof(uint), data, GL_DYNAMIC_COPY);
+                delete[] data;
+
+                glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+                glBindBuffer(GL_COPY_WRITE_BUFFER, 0);
+                glBindBuffer(GL_COPY_READ_BUFFER, 0);
+            }
+
+            delete[] new_particles;
+
+            // so, previously up-to-date buffer currently is not up-to-date
+            swap_particles_buffers();
+
+            particles_count += spawn_amount;
+
+            cout << ">> Created " << spawn_amount << " particle";
+            cout << (spawn_amount == 1 ? "" : "s");
+            cout << ", total: " << particles_count << endl;
         }
     }
 
