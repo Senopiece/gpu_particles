@@ -678,12 +678,12 @@ int main()
             pass_uniform("takt", takt);
             glClear(GL_COLOR_BUFFER_BIT);
             glDrawArrays(GL_POINTS, 0, particles_count);
-            takt++;
 
             if ((play) && (glfwGetTime() - prev_t >= 1.0 / fps_limit))
             {
                 prev_t = glfwGetTime();
                 swap_particles_buffers();
+                takt++;
             }
         }
 
