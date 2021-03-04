@@ -7,7 +7,7 @@
 #include <SFML/System/Vector2.hpp>
 #include <SFML/System/Vector4.hpp>
 #include <SFML/System/Clock.hpp>
-#include <windows.h> 
+#include <windows.h>
 #include <fstream>
 #include <vector>
 
@@ -25,6 +25,9 @@ typedef vec4 particle;
 ///  C O M M O N  V A R I A B L E S  ///
 
 RenderWindow* window;
+
+Font font;
+Text fps_text("", font);
 
 uint frag_shader_id = 0;
 uint cur_prog_id = 0;
@@ -285,7 +288,7 @@ int main()
     // init //
     window = new RenderWindow(VideoMode(870, 870), "P A R T I C L E S");
     window->setVerticalSyncEnabled(true);
-    window->setFramerateLimit(fps_limit);
+    window->setFramerateLimit(0);
     {
         if (glewInit() != GLEW_OK)
         {
@@ -316,11 +319,6 @@ int main()
             glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
         }
 
-        // load initial paricles
-        {
-            load_particles();
-        }
-
         // prepare open gl
         {
             glEnable(GL_BLEND);
@@ -329,10 +327,16 @@ int main()
             glEnable(GL_PROGRAM_POINT_SIZE);
         }
 
+        load_particles();
+
         update_prepared_spawn();
+
+        font.loadFromFile("font.ttf");
     }
 
     Clock clock;
+    Time last_fps_test;
+    Time last_frame;
 
     // main loop //
     while (window->isOpen())
@@ -481,7 +485,6 @@ int main()
                         fps_limit += 5 * ((event.key.code == Keyboard::Up) * 2 - 1);
                         if (fps_limit <= 0)
                             fps_limit = 1;
-                        window->setFramerateLimit(fps_limit);
                     }
                     else if (Keyboard::isKeyPressed(Keyboard::RControl) || Keyboard::isKeyPressed(Keyboard::LControl))
                     {
@@ -733,10 +736,17 @@ int main()
                 glClear(GL_COLOR_BUFFER_BIT);
                 glDrawArrays(GL_POINTS, 0, particles_count);
 
-                if (play)
+                if ((play) && ((clock.getElapsedTime().asSeconds() - last_frame.asSeconds()) * fps_limit >= 1))
                 {
+                    last_frame = clock.getElapsedTime();
                     swap_particles_buffers();
                     takt++;
+                    if (takt % 10 == 0)
+                    {
+                        int x = clock.getElapsedTime().asMilliseconds() - last_fps_test.asMilliseconds();
+                        fps_text.setString("FPS: " + ((x == 0) ? "inf" : to_string(10000 / x)) + " / " + to_string(fps_limit));
+                        last_fps_test = clock.getElapsedTime();
+                    }
                 }
             }
 
@@ -793,6 +803,9 @@ int main()
                     glEnd();
                 }
             }
+            window->pushGLStates();
+            window->draw(fps_text);
+            window->popGLStates();
             glUseProgram(cur_prog_id);
         }
         window->display();
