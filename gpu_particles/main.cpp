@@ -1,168 +1,72 @@
-﻿#define GLEW_STATIC
+﻿#define SFML_STATIC
+#define GLEW_STATIC
+
 #include <GL/glew.h>
-#include <glfw3.h>
-#include <iostream>
+#include <SFML/Graphics.hpp>
+#include <SFML/OpenGL.hpp>
+#include <SFML/System/Vector2.hpp>
+#include <SFML/System/Vector4.hpp>
+#include <SFML/System/Clock.hpp>
+#include <windows.h>
+#include <fstream>
+#include <vector>
+
+#include "coordinates_mapping.h"
+#include "open_gl_related.h"
+
+using namespace std;
+using namespace sf;
 
 typedef unsigned int uint;
-using namespace std;
-
-#include "structures.hpp"
-
+typedef Vector2f vec2;
+typedef Vector4f vec4;
 typedef vec4 particle;
 
-GLFWwindow* window;
+///  C O M M O N  V A R I A B L E S  ///
 
-const string savepath = "save.bin";
+RenderWindow* window;
 
-uint particles_count = 0;
+Font font;
+Text dcps_text("", font);
+Text notify_text(">", font, 25);
+Clock notify_fade_timer;
 
-uint compiled_fragment_shader_id;
+uint frag_shader_id = 0;
 uint cur_prog_id = 0;
 
-float WINDOW_WIDTH = 870;
-float WINDOW_HEIGHT = 870;
+int   spawn_amount = 100;
+float spawn_radius = 40;
 
-uint selections_buffer;
-uint ssbos[2];
-bool flip = true;
+vec2* prepared_spawn = new vec2[spawn_amount];
 
-float fps_limit = 60;
+uint takt = 0;
+uint particles_count = 0;  // particles count in each SSBO
+uint selections_buffer;    // reference to graphics memory
+uint ssbos[2];             // references to graphics memory
+bool flip = true;          // to swap SSBO fastly
+
+int dcps_limit = 80;
 float scale = 1;
+vec2 anchor = vec2(-1, 0); // in use when shift pressed and right mouse pressed (change spawn_amount mode)
 vec2 shift;
-vec2 mouse_pos;
+vec2 last_mouse_pos;
+vec2 actual_mouse_pos;
 vec2 selection_start;
 bool active_selection = false;
 
-bool left_ctrl_pressed = false;
-bool right_ctrl_pressed = false;
 bool play = true;
 
-bool mouse_left_pressed = false;
-bool mouse_right_pressed = false;
-bool mouse_middle_pressed = false;
+///  N O T Y F Y  L A B E L  M A N A G M E N T  ///
 
-bool left_shift_pressed = false;
-bool right_shift_pressed = false;
-
-uint takt = 0;
-
-int spawn_amount = 100;
-float spawn_radius = 40;
-
-#include "conversations.hpp"
-#include "gl_wrapper.hpp"
-#include "functools.hpp"
-
-uint try_to_compile_shader(GLenum type, const string source)
+void notify(const string text)
 {
-    uint compiled_shader_id = glCreateShader(type);
-    {
-        const char* src = source.c_str();
-        glShaderSource(compiled_shader_id, 1, &src, 0);
-        glCompileShader(compiled_shader_id);
-    }
-
-    {
-        int is_compiled;
-        glGetShaderiv(compiled_shader_id, GL_COMPILE_STATUS, &is_compiled);
-
-        if (is_compiled != GL_TRUE)
-        {
-            GLsizei log_length;
-            glGetShaderiv(compiled_shader_id, GL_INFO_LOG_LENGTH, &log_length);
-
-            char* msg = new char[log_length];
-            glGetShaderInfoLog(compiled_shader_id, log_length, &log_length, msg);
-
-            cout << msg;
-
-            delete[] msg;
-            glDeleteShader(compiled_shader_id);
-
-            return 0;
-        }
-        else
-            return compiled_shader_id;
-    }
+    notify_text.setString("> " + text);
+    notify_fade_timer.restart();
 }
 
-void load_and_apply_vertex_shader(uint name)
-{
-    string path = "shaders/";
-    path += char(name + 48);
-    uint compiled_vertex_shader_id = try_to_compile_shader(GL_VERTEX_SHADER, get_content_from_file(path + ".glsl"));
+///  F I L E S Y S T E M   R E L A T E D  ///
 
-    if ((compiled_vertex_shader_id != 0) && (compiled_fragment_shader_id != 0))
-    {
-        uint program_id = glCreateProgram();
-        {
-            glAttachShader(program_id, compiled_vertex_shader_id);
-            glAttachShader(program_id, compiled_fragment_shader_id);
-
-            glLinkProgram(program_id);
-
-            glDeleteShader(compiled_vertex_shader_id);
-        }
-
-        // link program
-        {
-            int is_linked;
-            glGetProgramiv(program_id, GL_LINK_STATUS, &is_linked);
-
-            if (!is_linked)
-            {
-                GLsizei log_length;
-                glGetProgramiv(program_id, GL_INFO_LOG_LENGTH, &log_length);
-
-                char* msg = new char[log_length];
-                glGetProgramInfoLog(program_id, log_length, &log_length, msg);
-
-                cout << msg;
-
-                delete[] msg;
-                glDeleteProgram(program_id);
-
-                return;
-            }
-        }
-
-        // enable program
-        {
-            if (cur_prog_id != 0)
-            {
-                glDeleteProgram(cur_prog_id);
-            }
-            cur_prog_id = program_id;
-            glUseProgram(cur_prog_id);
-        }
-
-        // init uniforms
-        {
-            pass_uniform("window_relatives", vec2(870.f / WINDOW_WIDTH, 870.f / WINDOW_HEIGHT));
-            pass_uniform("shift", shift);
-            pass_uniform("scale", scale);
-            pass_uniform("mouse_left_pressed", mouse_left_pressed);
-            pass_uniform("mouse_right_pressed", mouse_right_pressed);
-            pass_uniform("mouse_middle_pressed", mouse_middle_pressed);
-            pass_uniform(
-                "mouse_pos",
-                vec2(
-                    map_coord_from(mouse_pos.x, shift.x, WINDOW_WIDTH),
-                    map_coord_from(mouse_pos.y, shift.y, WINDOW_HEIGHT)
-                )
-            );
-        }
-
-        cout << ">> Shader loaded successfully" << endl;
-    }
-}
-
-void swap_particles_buffers()
-{
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbos[flip]);
-    flip = !flip;
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, ssbos[flip]);
-}
+string savepath = "save.bin";
 
 void load_particles()
 {
@@ -170,8 +74,7 @@ void load_particles()
 
     if (!fs.is_open())
     {
-        cout << ">> Cannot open file " + savepath << endl;
-        return;
+        throw runtime_error("Cannot open file " + savepath);
     }
 
     fs.seekg(0, fs.end);
@@ -183,11 +86,11 @@ void load_particles()
     fs.read(data, length);
     if (!fs)
     {
-        cout << ">> Error while reading from " + savepath << endl;
+        throw runtime_error("Error while reading from " + savepath);
     }
     else if (length % 16 != 0)
     {
-        cout << ">> Incorrect file length, load terminated" << endl;
+        throw runtime_error("Incorrect file length, load terminated");
     }
     else
     {
@@ -206,430 +109,184 @@ void load_particles()
         delete[] data;
 
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
-
-        cout << ">> Particles loaded successfully, total: " << particles_count << endl;
     }
 
     fs.close();
     delete[] data;
+
+    notify(to_string(particles_count) + " particles was loaded");
 }
 
-void save_particles()
+string get_content_from_file(const string filepath)
 {
-    ofstream fs(savepath, ios::out | ios::binary | ios::trunc);
+    ifstream fs(filepath, ios::in | ios::binary);
 
     if (!fs.is_open())
     {
-        cout << ">> Cannot open file " + savepath << endl;
-        return;
+        throw runtime_error("Cannot open file " + filepath);
     }
 
-    glBindBuffer(GL_ARRAY_BUFFER, ssbos[!flip]);
+    string content;
 
-    char* data = new char[particles_count * sizeof(particle)];
+    fs.seekg(0, fs.end);
+    content.reserve(fs.tellg());
+    fs.seekg(0, fs.beg);
 
-    glGetBufferSubData(GL_ARRAY_BUFFER, 0, particles_count * sizeof(particle), data);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    content.assign((std::istreambuf_iterator<char>(fs)), std::istreambuf_iterator<char>());
 
-    fs.write(data, particles_count * sizeof(particle));
-    if (!fs)
-    {
-        cout << ">> Error while writing to " + savepath << endl;
-    }
     fs.close();
 
-    delete[] data;
-
-    cout << ">> Particles saved successfully" << endl;
+    return content;
 }
 
-void spawn_particles()
+///  S H A D E R   R E L A T E D  ///
+
+uint try_to_compile_shader(GLenum type, const string source)
 {
-    // create particles
-    particle* new_particles = new particle[spawn_amount];
+    uint compiled_shader_id = glCreateShader(type);
+    {
+        const char* src = source.data();
+        glShaderSource(compiled_shader_id, 1, &src, 0);
+        glCompileShader(compiled_shader_id);
+    }
 
-    float px = map_coord_from(mouse_pos.x, shift.x, WINDOW_WIDTH);
-    float py = map_coord_from(mouse_pos.y, shift.y, WINDOW_HEIGHT);
+    {
+        int is_compiled;
+        glGetShaderiv(compiled_shader_id, GL_COMPILE_STATUS, &is_compiled);
 
-    for (uint i = 0; i < spawn_amount; i += 1)
+        if (is_compiled != GL_TRUE)
+        {
+            GLsizei log_length;
+            glGetShaderiv(compiled_shader_id, GL_INFO_LOG_LENGTH, &log_length);
+
+            string msg;
+            msg.reserve(log_length);
+
+            glGetShaderInfoLog(compiled_shader_id, log_length, &log_length, (char*)msg.data());
+
+            glDeleteShader(compiled_shader_id);
+
+            throw runtime_error(msg);
+        }
+        else
+            return compiled_shader_id;
+    }
+}
+
+void load_and_apply_vertex_shader(uint name)
+{
+    string path = "shaders/";
+    path += char(name + 48);
+    path += ".glsl";
+
+    uint vertex_shader_id = try_to_compile_shader(GL_VERTEX_SHADER, get_content_from_file(path));
+
+    if ((vertex_shader_id != 0) && (frag_shader_id != 0))
+    {
+        uint program_id = glCreateProgram();
+        {
+            glAttachShader(program_id, vertex_shader_id);
+            glAttachShader(program_id, frag_shader_id);
+
+            glLinkProgram(program_id);
+
+            glDeleteShader(vertex_shader_id);
+        }
+
+        // link program
+        {
+            int is_linked;
+            glGetProgramiv(program_id, GL_LINK_STATUS, &is_linked);
+
+            if (!is_linked)
+            {
+                GLsizei log_length;
+                glGetProgramiv(program_id, GL_INFO_LOG_LENGTH, &log_length);
+
+                string msg;
+                msg.reserve(log_length);
+
+                glGetProgramInfoLog(program_id, log_length, &log_length, (char*)msg.data());
+
+                glDeleteProgram(program_id);
+
+                throw runtime_error(msg);
+            }
+        }
+
+        // enable program
+        {
+            if (cur_prog_id != 0)
+            {
+                glDeleteProgram(cur_prog_id);
+            }
+            cur_prog_id = program_id;
+            glUseProgram(cur_prog_id);
+        }
+
+        // init uniforms
+        {
+            pass_uniform(cur_prog_id, "window_relatives", 870.f / vec2(window->getSize()));
+            pass_uniform(cur_prog_id, "shift", shift);
+            pass_uniform(cur_prog_id, "scale", scale);
+            pass_uniform(cur_prog_id, "mouse_left_pressed", Mouse::isButtonPressed(Mouse::Left));
+            pass_uniform(cur_prog_id, "mouse_right_pressed", Mouse::isButtonPressed(Mouse::Right));
+            pass_uniform(cur_prog_id, "mouse_middle_pressed", Mouse::isButtonPressed(Mouse::Middle));
+            pass_uniform(
+                cur_prog_id,
+                "mouse_pos",
+                map_coord_from(*window, actual_mouse_pos, shift, scale)
+            );
+        }
+    }
+
+    notify("shader " + to_string(name) + ".glsl applied");
+}
+
+///  B U F F E R S   M A N A G M E N T  ///
+
+void swap_particles_buffers()
+{
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbos[flip]);
+    flip = !flip;
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, ssbos[flip]);
+}
+
+void update_prepared_spawn()
+{
+    delete[] prepared_spawn;
+    prepared_spawn = new vec2[spawn_amount];
+
+    for (uint i = 0; i < spawn_amount; i++)
     {
         float angle = float(rand()) * 6.2831 / RAND_MAX;
-        float dist = spawn_radius * sqrt(float(rand()) / RAND_MAX);
+        float dist = sqrt(float(rand()) / RAND_MAX);
 
-        new_particles[i] = vec4(
-            px + cosf(angle) * dist,
-            py + sinf(angle) * dist,
-            0,
-            0
+        prepared_spawn[i] = vec2(
+            cosf(angle) * dist,
+            sinf(angle) * dist
         );
     }
-
-    // update capacity of the both buffers and
-    // fill not up-to-date buffer with information from another buffer and add new particles in the end
-    {
-        glBindBuffer(GL_COPY_WRITE_BUFFER, ssbos[flip]);
-        glBindBuffer(GL_COPY_READ_BUFFER, ssbos[!flip]);
-
-        glBufferData(GL_COPY_WRITE_BUFFER, (particles_count + spawn_amount) * sizeof(particle), 0, GL_DYNAMIC_COPY);
-        glCopyBufferSubData(GL_COPY_READ_BUFFER, GL_COPY_WRITE_BUFFER, 0, 0, particles_count * sizeof(particle));
-        glBufferSubData(GL_COPY_WRITE_BUFFER, particles_count * sizeof(particle), spawn_amount * sizeof(particle), new_particles);
-        glBufferData(GL_COPY_READ_BUFFER, (particles_count + spawn_amount) * sizeof(particle), 0, GL_DYNAMIC_COPY);
-
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, selections_buffer);
-        uint* data = new uint[particles_count + spawn_amount]();
-        glBufferData(GL_SHADER_STORAGE_BUFFER, (particles_count + spawn_amount) * sizeof(uint), data, GL_DYNAMIC_COPY);
-        delete[] data;
-
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
-        glBindBuffer(GL_COPY_WRITE_BUFFER, 0);
-        glBindBuffer(GL_COPY_READ_BUFFER, 0);
-    }
-
-    delete[] new_particles;
-
-    // so, previously up-to-date buffer currently is not up-to-date
-    swap_particles_buffers();
-
-    particles_count += spawn_amount;
-
-    cout << ">> Created " << spawn_amount << " particle";
-    cout << (spawn_amount == 1 ? "" : "s");
-    cout << ", total: " << particles_count << endl;
 }
 
-void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
-{
-    if (key == GLFW_KEY_LEFT_CONTROL)
-    {
-        if (action == GLFW_PRESS)
-        {
-            left_ctrl_pressed = true;
-        }
-        else if (action == GLFW_RELEASE)
-        {
-            left_ctrl_pressed = false;
-        }
-    }
-    else if (key == GLFW_KEY_RIGHT_CONTROL)
-    {
-        if (action == GLFW_PRESS)
-        {
-            right_ctrl_pressed = true;
-        }
-        else if (action == GLFW_RELEASE)
-        {
-            right_ctrl_pressed = false;
-        }
-    }
-    else if ((key == GLFW_KEY_LEFT_SHIFT) || (key == GLFW_KEY_RIGHT_SHIFT))
-    {
-        if (action == GLFW_PRESS)
-        {
-            if (key == GLFW_KEY_LEFT_SHIFT)
-            {
-                left_shift_pressed = true;
-            }
-            else if (key == GLFW_KEY_RIGHT_SHIFT)
-            {
-                right_shift_pressed = true;
-            }
-
-            // throw selection
-            active_selection = false;
-            glBindBuffer(GL_SHADER_STORAGE_BUFFER, selections_buffer);
-            uint* zdata = new uint[particles_count]();
-            glBufferData(GL_SHADER_STORAGE_BUFFER, particles_count * sizeof(uint), zdata, GL_DYNAMIC_COPY);
-            delete zdata;
-            glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
-        }
-        else if (action == GLFW_RELEASE)
-        {
-            if (key == GLFW_KEY_LEFT_SHIFT)
-            {
-                left_shift_pressed = false;
-            }
-            else if (key == GLFW_KEY_RIGHT_SHIFT)
-            {
-                right_shift_pressed = false;
-            }
-        }
-    }
-    else if (action == GLFW_PRESS)
-    {
-        if (key == GLFW_KEY_SPACE)
-        {
-            play = !play;
-            cout << ">> " << (play ? "Play" : "Pause") << endl;
-        }
-        else if (key == GLFW_KEY_DELETE)
-        {
-            uint* selections = new uint[particles_count];
-
-            glBindBuffer(GL_SHADER_STORAGE_BUFFER, selections_buffer);
-            glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, particles_count * sizeof(uint), selections);
-
-            uint new_particles_count = 0;
-            for (uint i = 0; i < particles_count; i++)
-            {
-                if (!selections[i])
-                    new_particles_count++;
-            }
-
-            uint* zdata = new uint[new_particles_count]();
-            glBufferData(GL_SHADER_STORAGE_BUFFER, new_particles_count * sizeof(uint), zdata, GL_DYNAMIC_COPY);
-            delete[] zdata;
-
-            particle* data = new particle[particles_count];
-            particle* new_data = new particle[new_particles_count];
-            glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbos[!flip]);
-            glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, particles_count * sizeof(particle), data);
-
-            uint j = 0;
-            for (uint i = 0; i < particles_count; i++)
-            {
-                if (!selections[i])
-                {
-                    new_data[j] = data[i];
-                    j++;
-                }
-            }
-
-            glBufferData(GL_SHADER_STORAGE_BUFFER, new_particles_count * sizeof(particle), new_data, GL_DYNAMIC_COPY);
-            delete[] data;
-            delete[] new_data;
-
-            glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbos[flip]);
-            glBufferData(GL_SHADER_STORAGE_BUFFER, new_particles_count * sizeof(particle), 0, GL_DYNAMIC_COPY);
-
-            glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
-
-            delete[] selections;
-            
-            cout << ">> ";
-            cout << particles_count - new_particles_count << " particle";
-            cout << (particles_count - new_particles_count == 1 ? "": "s");
-            cout << " was deleted, still remains " << new_particles_count << " particle";
-            cout << (new_particles_count == 1 ? "" : "s") << endl;
-
-            particles_count = new_particles_count;
-        }
-        else if (key == GLFW_KEY_C)
-        {
-            if (left_ctrl_pressed || right_ctrl_pressed)
-            {
-                glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbos[0]);
-                glBufferData(GL_SHADER_STORAGE_BUFFER, 0, 0, GL_DYNAMIC_COPY);
-
-                glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbos[1]);
-                glBufferData(GL_SHADER_STORAGE_BUFFER, 0, 0, GL_DYNAMIC_COPY);
-
-                glBindBuffer(GL_SHADER_STORAGE_BUFFER, selections_buffer);
-                glBufferData(GL_SHADER_STORAGE_BUFFER, 0, 0, GL_DYNAMIC_COPY);
-
-                glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
-
-                particles_count = 0;
-
-                cout << ">> Cleared" << endl;
-            }
-        }
-        else if ((key >= GLFW_KEY_0) && (key <= GLFW_KEY_9))
-        {
-            load_and_apply_vertex_shader(key - GLFW_KEY_0);
-        }
-        else if ((key == GLFW_KEY_UP) || (key == GLFW_KEY_DOWN))
-        {
-            if (right_shift_pressed)
-            {
-                spawn_amount += 3 * ((key == GLFW_KEY_UP) * 2 - 1);
-                if (spawn_amount <= 0)
-                    spawn_amount = 1;
-                cout << ">> Spawn amount: " << spawn_amount << endl;
-            }
-            else if (left_shift_pressed)
-            {
-                spawn_radius += 5 * ((key == GLFW_KEY_UP) * 2 - 1);
-                if (spawn_radius <= 0)
-                    spawn_radius = 0;
-                cout << ">> Spawn radius: " << spawn_radius << endl;
-            }
-            else
-            {
-                fps_limit += 5 * ((key == GLFW_KEY_UP) * 2 - 1);
-                if (fps_limit <= 0)
-                    fps_limit = 1;
-                cout << ">> FPS limit: " << fps_limit << endl;
-            }
-        }
-        else if (left_ctrl_pressed || right_ctrl_pressed)
-        {
-            if (key == GLFW_KEY_S)
-            {
-                save_particles();
-            }
-            else if (key == GLFW_KEY_L)
-            {
-                load_particles();
-            }
-        }
-    }
-}
-
-void window_resize_callback(GLFWwindow* window, int width, int height)
-{
-    WINDOW_WIDTH = width;
-    WINDOW_HEIGHT = height;
-
-    pass_uniform("window_relatives", vec2(870.0 / width, 870.0 / height));
-    glViewport(0, 0, width, height);
-
-    pass_uniform(
-        "mouse_pos",
-        vec2(
-            map_coord_from(mouse_pos.x, shift.x, WINDOW_WIDTH),
-            map_coord_from(mouse_pos.y, shift.y, WINDOW_HEIGHT)
-        )
-    );
-}
-
-void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
-{
-    if (button == GLFW_MOUSE_BUTTON_LEFT)
-    {
-        mouse_left_pressed = (action == GLFW_PRESS);
-        pass_uniform("mouse_left_pressed", mouse_left_pressed);
-    }
-    else if (button == GLFW_MOUSE_BUTTON_RIGHT)
-    {
-        mouse_right_pressed = (action == GLFW_PRESS);
-        pass_uniform("mouse_right_pressed", mouse_right_pressed);
-
-        if (mouse_right_pressed && (left_shift_pressed || right_shift_pressed))
-        {
-            spawn_particles();
-        }
-    }
-    else if (button == GLFW_MOUSE_BUTTON_MIDDLE)
-    {
-        mouse_middle_pressed = (action == GLFW_PRESS);
-        pass_uniform("mouse_middle_pressed", mouse_middle_pressed);
-    }
-}
-
-void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
-{
-    float mx = WINDOW_WIDTH * 0.5f;
-    float my = WINDOW_HEIGHT * 0.5f;
-
-    float k = pow(1.12, -yoffset);
-
-    shift.x += scale * (mx - mouse_pos.x) * (1 - k);
-    shift.y += scale * (my - mouse_pos.y) * (1 - k);
-
-    scale *= k;
-
-    pass_uniform("scale", scale);
-    pass_uniform("shift", shift);
-    pass_uniform(
-        "mouse_pos",
-        vec2(
-            map_coord_from(mouse_pos.x, shift.x, WINDOW_WIDTH),
-            map_coord_from(mouse_pos.y, shift.y, WINDOW_HEIGHT)
-        )
-    );
-}
-
-void cursor_position_change_callback(GLFWwindow* window, double xpos, double ypos)
-{
-    ypos = WINDOW_HEIGHT - ypos; // convert coordinate system
-
-    // drag field
-    if ((mouse_left_pressed) && !(left_shift_pressed || right_shift_pressed))
-    {
-        shift.x += (xpos - mouse_pos.x)*scale;
-        shift.y += (ypos - mouse_pos.y)*scale;
-        pass_uniform("shift", shift);
-    }
-
-    // throw particles
-    if (mouse_right_pressed && (left_shift_pressed || right_shift_pressed))
-    {
-        spawn_particles();
-    }
-
-    mouse_pos.x = xpos;
-    mouse_pos.y = ypos;
-
-    pass_uniform(
-        "mouse_pos",
-        vec2(
-            map_coord_from(mouse_pos.x, shift.x, WINDOW_WIDTH),
-            map_coord_from(mouse_pos.y, shift.y, WINDOW_HEIGHT)
-        )
-    );
-}
-
-void endwords()
-{
-    cout << endl << "Press any key to exit" << endl;
-    cin.get();
-}
+///  E N T R Y  P O I N T  &  M A I N  L O O P  ///
 
 int main()
 {
-    // Initialize window with open GL
+    // init //
+    window = new RenderWindow(VideoMode(870, 870), "P A R T I C L E S");
+    window->setVerticalSyncEnabled(true);
+    window->setFramerateLimit(0);
     {
-        cout << ">>> Welcome to the club buddy <<<" << endl;
-
-        if (glfwInit())
+        if (glewInit() != GLEW_OK)
         {
-            cout << ">> GLFW initialized" << endl;
-        }
-        else
-        {
-            cout << ">> Cannot init GLFW" << endl << endl;
-            endwords();
-            return -1;
-        }
-
-        window = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "particles", 0, 0);
-        glfwSetWindowSizeCallback(window, window_resize_callback);
-        glfwSetCursorPosCallback(window, cursor_position_change_callback);
-        glfwSetMouseButtonCallback(window, mouse_button_callback);
-        glfwSetScrollCallback(window, scroll_callback);
-
-        double xtmp, ytmp;
-        glfwGetCursorPos(window, &xtmp, &ytmp);
-        mouse_pos = vec2(xtmp, ytmp);
-
-        if (window)
-        {
-            glfwMakeContextCurrent(window);
-            glfwSetKeyCallback(window, key_callback);
-            cout << ">> Window created" << endl;
-        }
-        else
-        {
-            cout << ">> Fail to create window" << endl << endl;
-            endwords();
-            return -1;
-        }
-
-        if (glewInit() == GLEW_OK)
-        {
-            cout << ">> GLEW initialized" << endl;
-        }
-        else
-        {
-            cout << ">> Cannot init GLEW" << endl << endl;
-            endwords();
             return -1;
         }
 
         // prepare shaders
         {
-            compiled_fragment_shader_id = try_to_compile_shader(
-                GL_FRAGMENT_SHADER, 
+            frag_shader_id = try_to_compile_shader(
+                GL_FRAGMENT_SHADER,
                 "#version 330 core\nin vec4 pixel_color;\nout vec4 color;\nvoid main(){color = vec4(pixel_color);}"
             );
             load_and_apply_vertex_shader(1);
@@ -650,11 +307,6 @@ int main()
             glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
         }
 
-        // load initial paricles
-        {
-            load_particles();
-        }
-
         // prepare open gl
         {
             glEnable(GL_BLEND);
@@ -662,146 +314,556 @@ int main()
             glPolygonMode(GL_FRONT, GL_FILL);
             glEnable(GL_PROGRAM_POINT_SIZE);
         }
+
+        load_particles();
+
+        update_prepared_spawn();
+
+        font.loadFromFile("font.ttf");
+
+        notify_text.setPosition(0, 35);
     }
 
-    double prev_t = glfwGetTime();
+    Clock clock;
+    Time last_dcps_test;
+    Clock dcps_limiter;
 
-    // Main loop
-    while (!glfwWindowShouldClose(window))
+    // main loop //
+    while (window->isOpen())
     {
-        // render particles
+        // calculate new actual mouse position
+        actual_mouse_pos = vec2(Mouse::getPosition(*window));
+        actual_mouse_pos.y = window->getSize().y - actual_mouse_pos.y;
+
+        // converted vectors //
+
+        // mouse
+        vec2 mp = map_coord_to(*window, actual_mouse_pos);
+        vec2 dp = map_coord_from(*window, actual_mouse_pos, shift, scale);
+
+        // selection
+        vec2 ss;
+        vec2 ds;
+
+        // process events (mouse/key/scroll/etc...) //
+        try
         {
-            vec4 sel(
-                map_coord_from(selection_start.x, shift.x, WINDOW_WIDTH),
-                map_coord_from(selection_start.y, shift.y, WINDOW_HEIGHT),
-                map_coord_from(mouse_pos.x, shift.x, WINDOW_WIDTH),
-                map_coord_from(mouse_pos.y, shift.y, WINDOW_HEIGHT)
+            bool mouse_moved = false;
+
+            Event event;
+            while (window->pollEvent(event))
+            {
+                if (event.type == Event::MouseMoved)
+                {
+                    mouse_moved = true;
+                    vec2 mouse_pos = vec2(event.mouseMove.x, window->getSize().y - event.mouseMove.y);
+
+                    if (!(Mouse::isButtonPressed(Mouse::Right) && (Keyboard::isKeyPressed(Keyboard::RShift) || Keyboard::isKeyPressed(Keyboard::LShift))))
+                    {
+                        if (Mouse::isButtonPressed(Mouse::Left) && !(Keyboard::isKeyPressed(Keyboard::RShift) || Keyboard::isKeyPressed(Keyboard::LShift)))
+                        {
+                            glBindBuffer(GL_SHADER_STORAGE_BUFFER, selections_buffer);
+
+                            vector<uint> selected;
+
+                            // retrive selected
+                            {
+                                uint* data = new uint[particles_count];
+                                glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, particles_count * sizeof(uint), data);
+                                for (uint i = 0; i < particles_count; i++)
+                                {
+                                    if (data[i])
+                                    {
+                                        selected.push_back(i);
+                                    }
+                                }
+                                delete[] data;
+                            }
+
+                            if (selected.empty())
+                            {
+                                // drag field
+                                shift.x += (mouse_pos.x - last_mouse_pos.x) * scale;
+                                shift.y += (mouse_pos.y - last_mouse_pos.y) * scale;
+                                pass_uniform(cur_prog_id, "shift", shift);
+                            }
+                            else
+                            {
+                                // drag selected
+                                particle* data = new particle[particles_count];
+                                glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbos[!flip]);
+                                glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, particles_count * sizeof(particle), data);
+                                for (uint const& i : selected)
+                                {
+                                    data[i].x += (mouse_pos.x - last_mouse_pos.x) * scale;
+                                    data[i].y += (mouse_pos.y - last_mouse_pos.y) * scale;
+                                }
+                                glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, particles_count * sizeof(particle), data);
+                                delete[] data;
+                            }
+
+                            glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+                        }
+
+                        pass_uniform(
+                            cur_prog_id,
+                            "mouse_pos",
+                            map_coord_from(*window, mouse_pos, shift, scale)
+                        );
+                    }
+
+                    last_mouse_pos = mouse_pos;
+                }
+                else if (event.type == Event::KeyPressed)
+                {
+                    if (event.key.code == Keyboard::Space)
+                    {
+                        play = !play;
+                        notify(play ? "play" : "pause");
+                    }
+                    else if (event.key.code == Keyboard::Delete)
+                    {
+                        uint* selections = new uint[particles_count];
+
+                        glBindBuffer(GL_SHADER_STORAGE_BUFFER, selections_buffer);
+                        glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, particles_count * sizeof(uint), selections);
+
+                        uint new_particles_count = 0;
+                        for (uint i = 0; i < particles_count; i++)
+                        {
+                            if (!selections[i])
+                                new_particles_count++;
+                        }
+
+                        uint* zdata = new uint[new_particles_count]();
+                        glBufferData(GL_SHADER_STORAGE_BUFFER, new_particles_count * sizeof(uint), zdata, GL_DYNAMIC_COPY);
+                        delete[] zdata;
+
+                        particle* data = new particle[particles_count];
+                        particle* new_data = new particle[new_particles_count];
+                        glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbos[!flip]);
+                        glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, particles_count * sizeof(particle), data);
+
+                        uint j = 0;
+                        for (uint i = 0; i < particles_count; i++)
+                        {
+                            if (!selections[i])
+                            {
+                                new_data[j] = data[i];
+                                j++;
+                            }
+                        }
+
+                        glBufferData(GL_SHADER_STORAGE_BUFFER, new_particles_count * sizeof(particle), new_data, GL_DYNAMIC_COPY);
+                        delete[] data;
+                        delete[] new_data;
+
+                        glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbos[flip]);
+                        glBufferData(GL_SHADER_STORAGE_BUFFER, new_particles_count * sizeof(particle), 0, GL_DYNAMIC_COPY);
+
+                        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+
+                        delete[] selections;
+
+                        string str;
+
+                        str += to_string(particles_count - new_particles_count) + " particle";
+                        str += particles_count - new_particles_count == 1 ? "" : "s";
+                        str += " was deleted, " + to_string(new_particles_count) + " particle";
+                        str += new_particles_count == 1 ? "" : "s";
+                        str += " still remains";
+
+                        notify(str);
+
+                        particles_count = new_particles_count;
+                    }
+                    else if ((event.key.code >= Keyboard::Num0) && (event.key.code <= Keyboard::Num9))
+                    {
+                        load_and_apply_vertex_shader(event.key.code - Keyboard::Num0);
+                    }
+                    else if ((event.key.code == Keyboard::Up) || (event.key.code == Keyboard::Down))
+                    {
+                        dcps_limit += 5 * ((event.key.code == Keyboard::Up) * 2 - 1);
+                        if (dcps_limit <= 0)
+                            dcps_limit = 1;
+                        dcps_text.setString("dcps: estimating... / " + to_string(dcps_limit));
+                    }
+                    else if (Keyboard::isKeyPressed(Keyboard::RControl) || Keyboard::isKeyPressed(Keyboard::LControl))
+                    {
+                        if (event.key.code == Keyboard::S)
+                        {
+                            ofstream fs(savepath, ios::out | ios::binary | ios::trunc);
+
+                            if (!fs.is_open())
+                            {
+                                throw runtime_error("Cannot open file " + savepath);
+                            }
+
+                            glBindBuffer(GL_ARRAY_BUFFER, ssbos[!flip]);
+
+                            char* data = new char[particles_count * sizeof(particle)];
+
+                            glGetBufferSubData(GL_ARRAY_BUFFER, 0, particles_count * sizeof(particle), data);
+                            glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+                            fs.write(data, particles_count * sizeof(particle));
+                            if (!fs)
+                            {
+                                throw runtime_error("Error while writing to " + savepath);
+                            }
+                            fs.close();
+
+                            delete[] data;
+
+                            notify("particles state was saved");
+                        }
+                        else if (event.key.code == Keyboard::L)
+                        {
+                            load_particles();
+                        }
+                        else if (event.key.code == Keyboard::C)
+                        {
+                            glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbos[0]);
+                            glBufferData(GL_SHADER_STORAGE_BUFFER, 0, 0, GL_DYNAMIC_COPY);
+
+                            glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbos[1]);
+                            glBufferData(GL_SHADER_STORAGE_BUFFER, 0, 0, GL_DYNAMIC_COPY);
+
+                            glBindBuffer(GL_SHADER_STORAGE_BUFFER, selections_buffer);
+                            glBufferData(GL_SHADER_STORAGE_BUFFER, 0, 0, GL_DYNAMIC_COPY);
+
+                            glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+
+                            particles_count = 0;
+
+                            notify("cleared");
+                        }
+                    }
+                }
+                else if (event.type == Event::Resized)
+                {
+                    vec2 dimensions = vec2(event.size.width, event.size.height);
+                    pass_uniform(cur_prog_id, "window_relatives", 870.f / dimensions);
+                    glViewport(0, 0, dimensions.x, dimensions.y);
+                    window->setView(View(FloatRect(0, 0, dimensions.x, dimensions.y)));
+
+                    pass_uniform(
+                        cur_prog_id,
+                        "mouse_pos",
+                        map_coord_from(*window, actual_mouse_pos, shift, scale)
+                    );
+                }
+                else if (event.type == Event::MouseWheelScrolled)
+                {
+                    float k = pow(1.12, -event.mouseWheelScroll.delta);
+
+                    if (Keyboard::isKeyPressed(Keyboard::RShift) || Keyboard::isKeyPressed(Keyboard::LShift))
+                    {
+                        spawn_radius *= k;
+                    }
+                    else
+                    {
+                        vec2 dimensions = vec2(window->getSize()) / 2.f;
+
+                        shift.x += scale * (dimensions.x - actual_mouse_pos.x) * (1 - k);
+                        shift.y += scale * (dimensions.y - actual_mouse_pos.y) * (1 - k);
+
+                        scale *= k;
+
+                        pass_uniform(cur_prog_id, "scale", scale);
+                        pass_uniform(cur_prog_id, "shift", shift);
+                        pass_uniform(
+                            cur_prog_id,
+                            "mouse_pos",
+                            map_coord_from(*window, actual_mouse_pos, shift, scale)
+                        );
+                    }
+                }
+                else if (event.type == Event::Closed)
+                {
+                    window->close();
+                }
+            }
+
+            // selection
+            if (!(Keyboard::isKeyPressed(Keyboard::RShift) || Keyboard::isKeyPressed(Keyboard::LShift)) && Mouse::isButtonPressed(Mouse::Right))
+            {
+                if (!active_selection)
+                {
+                    selection_start = actual_mouse_pos;
+                    active_selection = true;
+                    pass_uniform(cur_prog_id, "active_selection", active_selection);
+                    pass_uniform(cur_prog_id, "selection", vec4(
+                        dp.x, dp.y, dp.x, dp.y
+                    ));
+                }
+            }
+            else if (active_selection)
+            {
+                active_selection = false;
+                pass_uniform(cur_prog_id, "active_selection", active_selection);
+
+                uint* selections = new uint[particles_count];
+
+                glBindBuffer(GL_SHADER_STORAGE_BUFFER, selections_buffer);
+                glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, particles_count * sizeof(uint), selections);
+                glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+
+                uint selected_count = 0;
+                for (uint i = 0; i < particles_count; i++)
+                {
+                    if (selections[i])
+                        selected_count++;
+                }
+
+                delete[] selections;
+
+                notify(to_string(selected_count) + " particle" + (selected_count == 1 ? "": "s" ) + " was selected");
+            }
+
+            // define converted selecion coordinates
+            ss = map_coord_to(*window, selection_start);
+            ds = map_coord_from(*window, selection_start, shift, scale);
+
+            // pass selection to shader
+            if (mouse_moved && active_selection)
+            {
+                vec4 sel(ds.x, ds.y, dp.x, dp.y);
+
+                if (sel.z < sel.x)
+                {
+                    float tmp = sel.z;
+                    sel.z = sel.x;
+                    sel.x = tmp;
+                }
+
+                if (sel.w < sel.y)
+                {
+                    float tmp = sel.w;
+                    sel.w = sel.y;
+                    sel.y = tmp;
+                }
+
+                pass_uniform(cur_prog_id, "selection", sel);
+            }
+
+            // change spawn properties
+            if (Mouse::isButtonPressed(Mouse::Right) && (Keyboard::isKeyPressed(Keyboard::RShift) || Keyboard::isKeyPressed(Keyboard::LShift)))
+            {
+                if (anchor.x == -1)
+                {
+                    anchor = actual_mouse_pos;
+                    window->setMouseCursorVisible(false);
+                }
+
+                float d = actual_mouse_pos.x - anchor.x;
+
+                Mouse::setPosition(Vector2i(anchor.x, window->getSize().y - anchor.y), *window);
+
+                if (d != 0)
+                {
+                    if (spawn_amount + d < 1)
+                        d = 1 - spawn_amount;
+
+                    spawn_amount += d;
+
+                    // update prepared spawn
+                    vec2* new_prepared_spawn = new vec2[spawn_amount];
+                    if (d < 0)
+                    {
+                        // cut prepared spawn
+                        for (uint i = 0; i < spawn_amount; i++)
+                            new_prepared_spawn[i] = prepared_spawn[i];
+                        delete[] prepared_spawn;
+                        prepared_spawn = new_prepared_spawn;
+                    }
+                    else
+                    {
+                        // copy whole prepared spawn
+                        for (uint i = 0; i < spawn_amount - d; i++)
+                            new_prepared_spawn[i] = prepared_spawn[i];
+                        delete[] prepared_spawn;
+
+                        // add new elements
+                        for (uint i = spawn_amount - d; i < spawn_amount; i++)
+                        {
+                            float angle = float(rand()) * 6.2831 / RAND_MAX;
+                            float dist = sqrt(float(rand()) / RAND_MAX);
+
+                            new_prepared_spawn[i] = vec2(
+                                cosf(angle) * dist,
+                                sinf(angle) * dist
+                            );
+                        }
+
+                        prepared_spawn = new_prepared_spawn;
+                    }
+                }
+            }
+            else if (anchor.x != -1)
+            {
+                window->setMouseCursorVisible(true);
+                anchor.x = -1;
+            }
+        }
+        catch (runtime_error err)
+        {
+            size_t size = strlen(err.what()) + 1;
+            wchar_t* msg = new wchar_t[size];
+
+            size_t outSize;
+            mbstowcs_s(&outSize, msg, size, err.what(), size - 1);
+
+            MessageBox(
+                window->getSystemHandle(),
+                msg,
+                L"Error",
+                MB_OK
             );
 
-            if (sel.z < sel.x)
-            {
-                float tmp = sel.z;
-                sel.z = sel.x;
-                sel.x = tmp;
-            }
+            delete[] msg;
+        }
 
-            if (sel.w < sel.y)
+        // render new frame //
+        window->clear();
+        {
+            // throw particles
+            if (Mouse::isButtonPressed(Mouse::Left) && (Keyboard::isKeyPressed(Keyboard::RShift) || Keyboard::isKeyPressed(Keyboard::LShift)))
             {
-                float tmp = sel.w;
-                sel.w = sel.y;
-                sel.y = tmp;
-            }
+                // create particles
+                particle* new_particles = new particle[spawn_amount];
 
-            pass_uniform("selection", sel);
-            pass_uniform("active_selection", active_selection);
-            pass_uniform("time", (float)glfwGetTime());
-            pass_uniform("takt", takt);
-            glClear(GL_COLOR_BUFFER_BIT);
-            glDrawArrays(GL_POINTS, 0, particles_count);
-            takt++;
+                for (uint i = 0; i < spawn_amount; i++)
+                {
+                    new_particles[i] = vec4(
+                        dp.x + prepared_spawn[i].x * spawn_radius,
+                        dp.y + prepared_spawn[i].y * spawn_radius,
+                        0,
+                        0
+                    );
+                }
 
-            if ((play) && (glfwGetTime() - prev_t >= 1.0 / fps_limit))
-            {
-                prev_t = glfwGetTime();
+                update_prepared_spawn();
+
+                // update capacity of the both buffers and
+                // fill not up-to-date buffer with information from another buffer and add new particles in the end
+                {
+                    glBindBuffer(GL_COPY_WRITE_BUFFER, ssbos[flip]);
+                    glBindBuffer(GL_COPY_READ_BUFFER, ssbos[!flip]);
+
+                    glBufferData(GL_COPY_WRITE_BUFFER, (particles_count + spawn_amount) * sizeof(particle), 0, GL_DYNAMIC_COPY);
+                    glCopyBufferSubData(GL_COPY_READ_BUFFER, GL_COPY_WRITE_BUFFER, 0, 0, particles_count * sizeof(particle));
+                    glBufferSubData(GL_COPY_WRITE_BUFFER, particles_count * sizeof(particle), spawn_amount * sizeof(particle), new_particles);
+                    glBufferData(GL_COPY_READ_BUFFER, (particles_count + spawn_amount) * sizeof(particle), 0, GL_DYNAMIC_COPY);
+
+                    glBindBuffer(GL_SHADER_STORAGE_BUFFER, selections_buffer);
+                    uint* data = new uint[particles_count + spawn_amount]();
+                    glBufferData(GL_SHADER_STORAGE_BUFFER, (particles_count + spawn_amount) * sizeof(uint), data, GL_DYNAMIC_COPY);
+                    delete[] data;
+
+                    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+                    glBindBuffer(GL_COPY_WRITE_BUFFER, 0);
+                    glBindBuffer(GL_COPY_READ_BUFFER, 0);
+                }
+
+                delete[] new_particles;
+
+                // so, previously up-to-date buffer currently is not up-to-date
                 swap_particles_buffers();
-            }
-        }
 
-        // render selection box
-        glUseProgram(0);
-        if (active_selection)
-        {
-            glBegin(GL_LINES);
+                particles_count += spawn_amount;
+            }
+
+            // render particles
             {
-                glColor4f(0, 0.8, 1, 0.6);
-                glVertex2f(
-                    map_coord_to(selection_start.x, WINDOW_WIDTH),
-                    map_coord_to(selection_start.y, WINDOW_HEIGHT)
-                );
-                glVertex2f(
-                    map_coord_to(mouse_pos.x, WINDOW_WIDTH),
-                    map_coord_to(selection_start.y, WINDOW_HEIGHT)
-                );
+                pass_uniform(cur_prog_id, "time", clock.getElapsedTime().asSeconds());
+                pass_uniform(cur_prog_id, "takt", takt);
+                glClear(GL_COLOR_BUFFER_BIT);
+                glDrawArrays(GL_POINTS, 0, particles_count);
 
-                glColor4f(0, 0.8, 1, 0.6);
-                glVertex2f(
-                    map_coord_to(selection_start.x, WINDOW_WIDTH),
-                    map_coord_to(selection_start.y, WINDOW_HEIGHT)
-                );
-                glVertex2f(
-                    map_coord_to(selection_start.x, WINDOW_WIDTH),
-                    map_coord_to(mouse_pos.y, WINDOW_HEIGHT)
-                );
-
-                glColor4f(0, 0.8, 1, 0.6);
-                glVertex2f(
-                    map_coord_to(mouse_pos.x, WINDOW_WIDTH),
-                    map_coord_to(mouse_pos.y, WINDOW_HEIGHT)
-                );
-                glVertex2f(
-                    map_coord_to(mouse_pos.x, WINDOW_WIDTH),
-                    map_coord_to(selection_start.y, WINDOW_HEIGHT)
-                );
-
-                glColor4f(0, 0.8, 1, 0.6);
-                glVertex2f(
-                    map_coord_to(mouse_pos.x, WINDOW_WIDTH),
-                    map_coord_to(mouse_pos.y, WINDOW_HEIGHT)
-                );
-                glVertex2f(
-                    map_coord_to(selection_start.x, WINDOW_WIDTH),
-                    map_coord_to(mouse_pos.y, WINDOW_HEIGHT)
-                );
+                if ((play) && (dcps_limiter.getElapsedTime().asSeconds() * float(dcps_limit) >= 1.f))
+                {
+                    dcps_limiter.restart();
+                    swap_particles_buffers();
+                    takt++;
+                    if (takt % 10 == 0)
+                    {
+                        int x = clock.getElapsedTime().asMilliseconds() - last_dcps_test.asMilliseconds();
+                        dcps_text.setString("dcps: " + ((x == 0) ? "inf" : to_string(float(10000) / x)) + " / " + to_string(dcps_limit));
+                        last_dcps_test = clock.getElapsedTime();
+                    }
+                }
             }
-            glEnd();
 
-            glBegin(GL_QUADS);
+            // fallback to manual operation
+            glUseProgram(0);
             {
-                glColor4f(0, 0.8, 1, 0.05);
-                glVertex2f(
-                    map_coord_to(selection_start.x, WINDOW_WIDTH),
-                    map_coord_to(selection_start.y, WINDOW_HEIGHT)
-                );
-                glVertex2f(
-                    map_coord_to(selection_start.x, WINDOW_WIDTH),
-                    map_coord_to(mouse_pos.y, WINDOW_HEIGHT)
-                );
-                glVertex2f(
-                    map_coord_to(mouse_pos.x, WINDOW_WIDTH),
-                    map_coord_to(mouse_pos.y, WINDOW_HEIGHT)
-                );
-                glVertex2f(
-                    map_coord_to(mouse_pos.x, WINDOW_WIDTH),
-                    map_coord_to(selection_start.y, WINDOW_HEIGHT)
-                );
-            }
-            glEnd();
-        }
-        glUseProgram(cur_prog_id);
+                if (Keyboard::isKeyPressed(Keyboard::RShift) || Keyboard::isKeyPressed(Keyboard::LShift))
+                {
+                    vec2 center;
+                    if (anchor.x == -1)
+                    {
+                        center = actual_mouse_pos;
+                    }
+                    else
+                    {
+                        center = anchor;
+                    }
 
-        glfwSwapBuffers(window);
-        glfwPollEvents();
+                    // render spawn circle
+                    draw_circle(*window, center, spawn_radius / scale, vec4(1, 1, 1, 1));
 
-        // check for start selection
-        if ((left_shift_pressed || right_shift_pressed) && (mouse_left_pressed))
-        {
-            if (!active_selection)
-            {
-                selection_start = mouse_pos;
-                active_selection = true;
+                    // render density representation
+                    glBegin(GL_POINTS);
+                    glColor4f(1, 1, 1, 1);
+                    for (uint i = 0; i < spawn_amount; i++)
+                    {
+                        vec2 rd = map_coord_to(*window, center + prepared_spawn[i] * spawn_radius / scale);
+                        glVertex2f(rd.x, rd.y);
+                    }
+                    glEnd();
+                }
+
+                // render selection box
+                if (active_selection)
+                {
+                    glBegin(GL_LINE_LOOP);
+                    {
+                        glColor4f(0, 0.8, 1, 0.6);
+                        glVertex2f(ss.x, ss.y);
+                        glVertex2f(ss.x, mp.y);
+                        glVertex2f(mp.x, mp.y);
+                        glVertex2f(mp.x, ss.y);
+                    }
+                    glEnd();
+
+                    glBegin(GL_QUADS);
+                    {
+                        glColor4f(0, 0.8, 1, 0.05);
+                        glVertex2f(ss.x, ss.y);
+                        glVertex2f(ss.x, mp.y);
+                        glVertex2f(mp.x, mp.y);
+                        glVertex2f(mp.x, ss.y);
+                    }
+                    glEnd();
+                }
             }
+            window->pushGLStates();
+            window->draw(dcps_text);
+            notify_text.setFillColor(
+                Color(255, 255, 255, max(0.f, 255 - notify_fade_timer.getElapsedTime().asSeconds()*50))
+            );
+            window->draw(notify_text);
+            window->popGLStates();
+            glUseProgram(cur_prog_id);
         }
-        else
-        {
-            active_selection = false;
-        }
+        window->display();
     }
 
     glDeleteBuffers(2, ssbos);
     glDeleteBuffers(1, &selections_buffer);
     glDeleteProgram(cur_prog_id);
-    glDeleteShader(compiled_fragment_shader_id);
-    glfwTerminate();
+    glDeleteShader(frag_shader_id);
 
     return 0;
 }
