@@ -7,6 +7,7 @@
 #include <SFML/System/Vector2.hpp>
 #include <SFML/System/Vector4.hpp>
 #include <SFML/System/Clock.hpp>
+#include <windows.h> 
 #include <fstream>
 #include <vector>
 
@@ -133,7 +134,7 @@ string get_content_from_file(const string filepath)
 
     if (!fs.is_open())
     {
-        throw runtime_error("Cannot open file");
+        throw runtime_error("Cannot open file " + filepath);
     }
 
     string content;
@@ -509,10 +510,6 @@ int main()
                         }
                     }
                 }
-                else if (event.type == Event::Closed)
-                {
-                    window->close();
-                }
                 else if (event.type == Event::Resized)
                 {
                     vec2 dimensions = vec2(event.size.width, event.size.height);
@@ -550,6 +547,10 @@ int main()
                             map_coord_from(*window, actual_mouse_pos, shift, scale)
                         );
                     }
+                }
+                else if (event.type == Event::Closed)
+                {
+                    window->close();
                 }
             }
 
@@ -659,7 +660,20 @@ int main()
         }
         catch (runtime_error err)
         {
-            // TODO: raise alert window with err description
+            size_t size = strlen(err.what()) + 1;
+            wchar_t* msg = new wchar_t[size];
+
+            size_t outSize;
+            mbstowcs_s(&outSize, msg, size, err.what(), size - 1);
+
+            MessageBox(
+                window->getSystemHandle(),
+                msg,
+                L"Error",
+                MB_OK
+            );
+
+            delete[] msg;
         }
 
         // render new frame //
