@@ -27,7 +27,9 @@ typedef vec4 particle;
 RenderWindow* window;
 
 Font font;
-Text fps_text("", font);
+Text dcps_text("", font);
+Text notify_text(">", font, 25);
+Clock notify_fade_timer;
 
 uint frag_shader_id = 0;
 uint cur_prog_id = 0;
@@ -43,7 +45,7 @@ uint selections_buffer;    // reference to graphics memory
 uint ssbos[2];             // references to graphics memory
 bool flip = true;          // to swap SSBO fastly
 
-int fps_limit = 120;
+int dcps_limit = 80;
 float scale = 1;
 vec2 anchor = vec2(-1, 0); // in use when shift pressed and right mouse pressed (change spawn_amount mode)
 vec2 shift;
@@ -53,6 +55,14 @@ vec2 selection_start;
 bool active_selection = false;
 
 bool play = true;
+
+///  N O T Y F Y  L A B E L  M A N A G M E N T  ///
+
+void notify(const string text)
+{
+    notify_text.setString("> " + text);
+    notify_fade_timer.restart();
+}
 
 ///  F I L E S Y S T E M   R E L A T E D  ///
 
@@ -103,32 +113,8 @@ void load_particles()
 
     fs.close();
     delete[] data;
-}
 
-void save_particles()
-{
-    ofstream fs(savepath, ios::out | ios::binary | ios::trunc);
-
-    if (!fs.is_open())
-    {
-        throw runtime_error("Cannot open file " + savepath);
-    }
-
-    glBindBuffer(GL_ARRAY_BUFFER, ssbos[!flip]);
-
-    char* data = new char[particles_count * sizeof(particle)];
-
-    glGetBufferSubData(GL_ARRAY_BUFFER, 0, particles_count * sizeof(particle), data);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-    fs.write(data, particles_count * sizeof(particle));
-    if (!fs)
-    {
-        throw runtime_error("Error while writing to " + savepath);
-    }
-    fs.close();
-
-    delete[] data;
+    notify(to_string(particles_count) + " particles was loaded");
 }
 
 string get_content_from_file(const string filepath)
@@ -253,6 +239,8 @@ void load_and_apply_vertex_shader(uint name)
             );
         }
     }
+
+    notify("shader " + to_string(name) + ".glsl applied");
 }
 
 ///  B U F F E R S   M A N A G M E N T  ///
@@ -332,11 +320,13 @@ int main()
         update_prepared_spawn();
 
         font.loadFromFile("font.ttf");
+
+        notify_text.setPosition(0, 35);
     }
 
     Clock clock;
-    Time last_fps_test;
-    Time last_frame;
+    Time last_dcps_test;
+    Clock dcps_limiter;
 
     // main loop //
     while (window->isOpen())
@@ -429,6 +419,7 @@ int main()
                     if (event.key.code == Keyboard::Space)
                     {
                         play = !play;
+                        notify(play ? "play" : "pause");
                     }
                     else if (event.key.code == Keyboard::Delete)
                     {
@@ -474,6 +465,16 @@ int main()
 
                         delete[] selections;
 
+                        string str;
+
+                        str += to_string(particles_count - new_particles_count) + " particle";
+                        str += particles_count - new_particles_count == 1 ? "" : "s";
+                        str += " was deleted, " + to_string(new_particles_count) + " particle";
+                        str += new_particles_count == 1 ? "" : "s";
+                        str += " still remains";
+
+                        notify(str);
+
                         particles_count = new_particles_count;
                     }
                     else if ((event.key.code >= Keyboard::Num0) && (event.key.code <= Keyboard::Num9))
@@ -482,15 +483,39 @@ int main()
                     }
                     else if ((event.key.code == Keyboard::Up) || (event.key.code == Keyboard::Down))
                     {
-                        fps_limit += 5 * ((event.key.code == Keyboard::Up) * 2 - 1);
-                        if (fps_limit <= 0)
-                            fps_limit = 1;
+                        dcps_limit += 5 * ((event.key.code == Keyboard::Up) * 2 - 1);
+                        if (dcps_limit <= 0)
+                            dcps_limit = 1;
+                        dcps_text.setString("dcps: estimating... / " + to_string(dcps_limit));
                     }
                     else if (Keyboard::isKeyPressed(Keyboard::RControl) || Keyboard::isKeyPressed(Keyboard::LControl))
                     {
                         if (event.key.code == Keyboard::S)
                         {
-                            save_particles();
+                            ofstream fs(savepath, ios::out | ios::binary | ios::trunc);
+
+                            if (!fs.is_open())
+                            {
+                                throw runtime_error("Cannot open file " + savepath);
+                            }
+
+                            glBindBuffer(GL_ARRAY_BUFFER, ssbos[!flip]);
+
+                            char* data = new char[particles_count * sizeof(particle)];
+
+                            glGetBufferSubData(GL_ARRAY_BUFFER, 0, particles_count * sizeof(particle), data);
+                            glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+                            fs.write(data, particles_count * sizeof(particle));
+                            if (!fs)
+                            {
+                                throw runtime_error("Error while writing to " + savepath);
+                            }
+                            fs.close();
+
+                            delete[] data;
+
+                            notify("particles state was saved");
                         }
                         else if (event.key.code == Keyboard::L)
                         {
@@ -510,6 +535,8 @@ int main()
                             glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
                             particles_count = 0;
+
+                            notify("cleared");
                         }
                     }
                 }
@@ -570,10 +597,27 @@ int main()
                     ));
                 }
             }
-            else
+            else if (active_selection)
             {
                 active_selection = false;
                 pass_uniform(cur_prog_id, "active_selection", active_selection);
+
+                uint* selections = new uint[particles_count];
+
+                glBindBuffer(GL_SHADER_STORAGE_BUFFER, selections_buffer);
+                glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, particles_count * sizeof(uint), selections);
+                glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+
+                uint selected_count = 0;
+                for (uint i = 0; i < particles_count; i++)
+                {
+                    if (selections[i])
+                        selected_count++;
+                }
+
+                delete[] selections;
+
+                notify(to_string(selected_count) + " particle" + (selected_count == 1 ? "": "s" ) + " was selected");
             }
 
             // define converted selecion coordinates
@@ -736,16 +780,16 @@ int main()
                 glClear(GL_COLOR_BUFFER_BIT);
                 glDrawArrays(GL_POINTS, 0, particles_count);
 
-                if ((play) && ((clock.getElapsedTime().asSeconds() - last_frame.asSeconds()) * fps_limit >= 1))
+                if ((play) && (dcps_limiter.getElapsedTime().asSeconds() * float(dcps_limit) >= 1.f))
                 {
-                    last_frame = clock.getElapsedTime();
+                    dcps_limiter.restart();
                     swap_particles_buffers();
                     takt++;
                     if (takt % 10 == 0)
                     {
-                        int x = clock.getElapsedTime().asMilliseconds() - last_fps_test.asMilliseconds();
-                        fps_text.setString("FPS: " + ((x == 0) ? "inf" : to_string(10000 / x)) + " / " + to_string(fps_limit));
-                        last_fps_test = clock.getElapsedTime();
+                        int x = clock.getElapsedTime().asMilliseconds() - last_dcps_test.asMilliseconds();
+                        dcps_text.setString("dcps: " + ((x == 0) ? "inf" : to_string(float(10000) / x)) + " / " + to_string(dcps_limit));
+                        last_dcps_test = clock.getElapsedTime();
                     }
                 }
             }
@@ -804,7 +848,11 @@ int main()
                 }
             }
             window->pushGLStates();
-            window->draw(fps_text);
+            window->draw(dcps_text);
+            notify_text.setFillColor(
+                Color(255, 255, 255, max(0.f, 255 - notify_fade_timer.getElapsedTime().asSeconds()*50))
+            );
+            window->draw(notify_text);
             window->popGLStates();
             glUseProgram(cur_prog_id);
         }
