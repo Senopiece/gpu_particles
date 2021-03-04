@@ -545,6 +545,7 @@ int main()
                     vec2 dimensions = vec2(event.size.width, event.size.height);
                     pass_uniform(cur_prog_id, "window_relatives", 870.f / dimensions);
                     glViewport(0, 0, dimensions.x, dimensions.y);
+                    window->setView(View(FloatRect(0, 0, dimensions.x, dimensions.y)));
 
                     pass_uniform(
                         cur_prog_id,
