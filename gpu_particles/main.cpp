@@ -345,11 +345,12 @@ int main()
         vec2 ss;
         vec2 ds;
 
-        // process events (mouse/key/scroll/etc...) //
+        // handle input //
         try
         {
             bool mouse_moved = false;
 
+            // process events (mouse/key/scroll/etc...)
             Event event;
             while (window->pollEvent(event))
             {
@@ -705,28 +706,7 @@ int main()
                 window->setMouseCursorVisible(true);
                 anchor.x = -1;
             }
-        }
-        catch (runtime_error err)
-        {
-            size_t size = strlen(err.what()) + 1;
-            wchar_t* msg = new wchar_t[size];
 
-            size_t outSize;
-            mbstowcs_s(&outSize, msg, size, err.what(), size - 1);
-
-            MessageBox(
-                window->getSystemHandle(),
-                msg,
-                L"Error",
-                MB_OK
-            );
-
-            delete[] msg;
-        }
-
-        // render new frame //
-        window->clear();
-        {
             // throw particles
             if (Mouse::isButtonPressed(Mouse::Left) && (Keyboard::isKeyPressed(Keyboard::RShift) || Keyboard::isKeyPressed(Keyboard::LShift)))
             {
@@ -773,7 +753,28 @@ int main()
 
                 particles_count += spawn_amount;
             }
+        }
+        catch (runtime_error err)
+        {
+            size_t size = strlen(err.what()) + 1;
+            wchar_t* msg = new wchar_t[size];
 
+            size_t outSize;
+            mbstowcs_s(&outSize, msg, size, err.what(), size - 1);
+
+            MessageBox(
+                window->getSystemHandle(),
+                msg,
+                L"Error",
+                MB_OK
+            );
+
+            delete[] msg;
+        }
+
+        // render new frame //
+        window->clear();
+        {
             // render particles
             {
                 pass_uniform(cur_prog_id, "time", clock.getElapsedTime().asSeconds());
