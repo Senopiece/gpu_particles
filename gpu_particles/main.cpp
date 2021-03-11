@@ -45,7 +45,8 @@ uint selections_buffer;    // reference to graphics memory
 uint ssbos[2];             // references to graphics memory
 bool flip = true;          // to swap SSBO fastly
 
-int dcps_limit = 80;
+int dcps_limit = 60;
+float last_dcps = 59;
 float scale = 1;
 vec2 anchor = vec2(-1, 0); // in use when shift pressed and right mouse pressed (change spawn_amount mode)
 vec2 shift;
@@ -275,7 +276,6 @@ int main()
 {
     // init //
     window = new RenderWindow(VideoMode(870, 870), "P A R T I C L E S");
-    window->setVerticalSyncEnabled(true);
     window->setFramerateLimit(0);
     {
         if (glewInit() != GLEW_OK)
@@ -325,8 +325,8 @@ int main()
     }
 
     Clock clock;
-    Time last_dcps_test;
-    Clock dcps_limiter;
+    Clock last_draw;
+    Clock last_dcps_estimate;
 
     // main loop //
     while (window->isOpen())
@@ -484,10 +484,11 @@ int main()
                     }
                     else if ((event.key.code == Keyboard::Up) || (event.key.code == Keyboard::Down))
                     {
-                        dcps_limit += 5 * ((event.key.code == Keyboard::Up) * 2 - 1);
-                        if (dcps_limit <= 0)
-                            dcps_limit = 1;
-                        dcps_text.setString("dcps: estimating... / " + to_string(dcps_limit));
+                        dcps_limit += 16 * ((event.key.code == Keyboard::Up) * 2 - 1);
+                        if (dcps_limit < 3)
+                            dcps_limit = 3;
+
+                        dcps_text.setString("dcps: " + to_string(int(last_dcps)) + " / " + to_string(dcps_limit));
                     }
                     else if (Keyboard::isKeyPressed(Keyboard::RControl) || Keyboard::isKeyPressed(Keyboard::LControl))
                     {
@@ -782,17 +783,20 @@ int main()
                 glClear(GL_COLOR_BUFFER_BIT);
                 glDrawArrays(GL_POINTS, 0, particles_count);
 
-                if ((play) && (dcps_limiter.getElapsedTime().asSeconds() * float(dcps_limit) >= 1.f))
+                if ((play) && (last_draw.getElapsedTime().asMilliseconds() * dcps_limit >= 1000))
                 {
-                    dcps_limiter.restart();
                     swap_particles_buffers();
                     takt++;
-                    if (takt % 10 == 0)
+
+                    if (last_dcps_estimate.getElapsedTime().asMilliseconds() > 500)
                     {
-                        int x = clock.getElapsedTime().asMilliseconds() - last_dcps_test.asMilliseconds();
-                        dcps_text.setString("dcps: " + ((x == 0) ? "inf" : to_string(float(10000) / x)) + " / " + to_string(dcps_limit));
-                        last_dcps_test = clock.getElapsedTime();
+                        last_dcps = 1000.0 / last_draw.getElapsedTime().asMilliseconds();
+                        dcps_text.setString("dcps: " + to_string(int(last_dcps)) + " / " + to_string(dcps_limit));
+
+                        last_dcps_estimate.restart(); // set current time as the latest
                     }
+
+                    last_draw.restart(); // set current time as the latest
                 }
             }
 
