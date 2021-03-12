@@ -11,6 +11,7 @@
 #include <fstream>
 #include <vector>
 
+#include "labels.h"
 #include "coordinates_mapping.h"
 #include "open_gl_related.h"
 
@@ -26,9 +27,11 @@ typedef vec4 particle;
 
 RenderWindow* window;
 
-Font font;
-Text dcps_text("", font);
-Text notify_text(">", font, 25);
+Font default_font;
+
+FPS_Label fps_label(default_font);
+NotificationLabel notification_label(default_font);
+
 Clock notify_fade_timer;
 
 uint frag_shader_id = 0;
@@ -45,8 +48,8 @@ uint selections_buffer;    // reference to graphics memory
 uint ssbos[2];             // references to graphics memory
 bool flip = true;          // to swap SSBO fastly
 
-int dcps_limit = 60;
-float last_dcps = 59;
+int fps_limit = 60;
+float last_fps_estimate_result = 59;
 float scale = 1;
 vec2 anchor = vec2(-1, 0); // in use when shift pressed and right mouse pressed (change spawn_amount mode)
 vec2 shift;
@@ -56,14 +59,6 @@ vec2 selection_start;
 bool active_selection = false;
 
 bool play = true;
-
-///  N O T Y F Y  L A B E L  M A N A G M E N T  ///
-
-void notify(const string text)
-{
-    notify_text.setString("> " + text);
-    notify_fade_timer.restart();
-}
 
 ///  F I L E S Y S T E M   R E L A T E D  ///
 
@@ -115,7 +110,7 @@ void load_particles()
     fs.close();
     delete[] data;
 
-    notify(to_string(particles_count) + " particles was loaded");
+    notification_label.update(to_string(particles_count) + " particles was loaded");
 }
 
 string get_content_from_file(const string filepath)
@@ -241,7 +236,7 @@ void load_and_apply_vertex_shader(uint name)
         }
     }
 
-    notify("shader " + to_string(name) + ".glsl applied");
+    notification_label.update("shader " + to_string(name) + ".glsl applied");
 }
 
 ///  B U F F E R S   M A N A G M E N T  ///
@@ -319,14 +314,12 @@ int main()
 
         update_prepared_spawn();
 
-        font.loadFromFile("font.ttf");
-
-        notify_text.setPosition(0, 35);
+        default_font.loadFromFile("font.ttf");
     }
 
     Clock clock;
     Clock last_draw;
-    Clock last_dcps_estimate;
+    Clock last_fps_estimate;
 
     // main loop //
     while (window->isOpen())
@@ -420,7 +413,7 @@ int main()
                     if (event.key.code == Keyboard::Space)
                     {
                         play = !play;
-                        notify(play ? "play" : "pause");
+                        notification_label.update(play ? "play" : "pause");
                     }
                     else if (event.key.code == Keyboard::Delete)
                     {
@@ -470,11 +463,9 @@ int main()
 
                         str += to_string(particles_count - new_particles_count) + " particle";
                         str += particles_count - new_particles_count == 1 ? "" : "s";
-                        str += " was deleted, " + to_string(new_particles_count) + " particle";
-                        str += new_particles_count == 1 ? "" : "s";
-                        str += " still remains";
+                        str += " was deleted";
 
-                        notify(str);
+                        notification_label.update(str);
 
                         particles_count = new_particles_count;
                     }
@@ -484,11 +475,11 @@ int main()
                     }
                     else if ((event.key.code == Keyboard::Up) || (event.key.code == Keyboard::Down))
                     {
-                        dcps_limit += 16 * ((event.key.code == Keyboard::Up) * 2 - 1);
-                        if (dcps_limit < 3)
-                            dcps_limit = 3;
+                        fps_limit += 16 * ((event.key.code == Keyboard::Up) * 2 - 1);
+                        if (fps_limit < 3)
+                            fps_limit = 3;
 
-                        dcps_text.setString("dcps: " + to_string(int(last_dcps)) + " / " + to_string(dcps_limit));
+                        fps_label.update(last_fps_estimate_result, fps_limit);
                     }
                     else if (Keyboard::isKeyPressed(Keyboard::RControl) || Keyboard::isKeyPressed(Keyboard::LControl))
                     {
@@ -517,7 +508,7 @@ int main()
 
                             delete[] data;
 
-                            notify("particles state was saved");
+                            notification_label.update("particles state was saved");
                         }
                         else if (event.key.code == Keyboard::L)
                         {
@@ -538,7 +529,7 @@ int main()
 
                             particles_count = 0;
 
-                            notify("cleared");
+                            notification_label.update("cleared");
                         }
                     }
                 }
@@ -620,7 +611,7 @@ int main()
 
                 delete[] selections;
 
-                notify(to_string(selected_count) + " particle" + (selected_count == 1 ? "": "s" ) + " was selected");
+                notification_label.update(to_string(selected_count) + " particle" + (selected_count == 1 ? "": "s" ) + " was selected");
             }
 
             // define converted selecion coordinates
@@ -780,20 +771,24 @@ int main()
             {
                 pass_uniform(cur_prog_id, "time", clock.getElapsedTime().asSeconds());
                 pass_uniform(cur_prog_id, "takt", takt);
+
                 glClear(GL_COLOR_BUFFER_BIT);
                 glDrawArrays(GL_POINTS, 0, particles_count);
 
-                if ((play) && (last_draw.getElapsedTime().asMilliseconds() * dcps_limit >= 1000))
+                if (last_draw.getElapsedTime().asMilliseconds() * fps_limit >= 1000)
                 {
-                    swap_particles_buffers();
-                    takt++;
-
-                    if (last_dcps_estimate.getElapsedTime().asMilliseconds() > 500)
+                    if (play)
                     {
-                        last_dcps = 1000.0 / last_draw.getElapsedTime().asMilliseconds();
-                        dcps_text.setString("dcps: " + to_string(int(last_dcps)) + " / " + to_string(dcps_limit));
+                        swap_particles_buffers();
+                        takt++;
+                    }
 
-                        last_dcps_estimate.restart(); // set current time as the latest
+                    if (last_fps_estimate.getElapsedTime().asMilliseconds() > 500)
+                    {
+                        last_fps_estimate_result = 1000.0 / last_draw.getElapsedTime().asMilliseconds();
+                        fps_label.update(last_fps_estimate_result, fps_limit);
+
+                        last_fps_estimate.restart(); // set current time as the latest
                     }
 
                     last_draw.restart(); // set current time as the latest
@@ -853,13 +848,12 @@ int main()
                     glEnd();
                 }
             }
+
             window->pushGLStates();
-            window->draw(dcps_text);
-            notify_text.setFillColor(
-                Color(255, 255, 255, max(0.f, 255 - notify_fade_timer.getElapsedTime().asSeconds()*50))
-            );
-            window->draw(notify_text);
+            fps_label.render(*window);
+            notification_label.render(*window);
             window->popGLStates();
+
             glUseProgram(cur_prog_id);
         }
         window->display();

@@ -24,12 +24,18 @@
     <ClCompile Include="open_gl_related.cpp">
       <Filter>Исходные файлы</Filter>
     </ClCompile>
+    <ClCompile Include="labels.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="coordinates_mapping.h">
       <Filter>Файлы заголовков</Filter>
     </ClInclude>
     <ClInclude Include="open_gl_related.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="labels.h">
       <Filter>Файлы заголовков</Filter>
     </ClInclude>
   </ItemGroup>

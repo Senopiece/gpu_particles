@@ -1,5 +1,7 @@
 #pragma once
 
+#define SFML_STATIC
+
 #include <SFML/Graphics.hpp>
 #include <SFML/System/Vector2.hpp>
 #include <SFML/System/Vector4.hpp>

@@ -171,12 +171,14 @@
     </BuildLog>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="labels.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="coordinates_mapping.cpp" />
     <ClCompile Include="open_gl_related.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="coordinates_mapping.h" />
+    <ClInclude Include="labels.h" />
     <ClInclude Include="open_gl_related.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
