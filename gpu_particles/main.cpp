@@ -60,6 +60,47 @@ bool active_selection = false;
 
 bool play = true;
 
+///  B U F F E R S   M A N A G M E N T  ///
+
+void fill_ssbo_with_zeros() {
+    glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_WRITE_ONLY);
+
+    void* ptr;
+    glGetBufferPointerv(GL_SHADER_STORAGE_BUFFER, GL_BUFFER_MAP_POINTER, &ptr);
+
+    {
+        __int64 size;
+        glGetBufferParameteri64v(GL_SHADER_STORAGE_BUFFER, GL_BUFFER_SIZE, &size);
+        memset(ptr, 0, size);
+    }
+
+    glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
+}
+
+void swap_particles_buffers()
+{
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbos[flip]);
+    flip = !flip;
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, ssbos[flip]);
+}
+
+void update_prepared_spawn()
+{
+    delete[] prepared_spawn;
+    prepared_spawn = new vec2[spawn_amount];
+
+    for (uint i = 0; i < spawn_amount; i++)
+    {
+        float angle = float(rand()) * 6.2831 / RAND_MAX;
+        float dist = sqrt(float(rand()) / RAND_MAX);
+
+        prepared_spawn[i] = vec2(
+            cosf(angle) * dist,
+            sinf(angle) * dist
+        );
+    }
+}
+
 ///  F I L E S Y S T E M   R E L A T E D  ///
 
 string savepath = "save.bin";
@@ -100,9 +141,8 @@ void load_particles()
 
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, selections_buffer);
 
-        uint* data = new uint[particles_count]();
-        glBufferData(GL_SHADER_STORAGE_BUFFER, particles_count * sizeof(uint), data, GL_DYNAMIC_COPY);
-        delete[] data;
+        glBufferData(GL_SHADER_STORAGE_BUFFER, particles_count * sizeof(uint), NULL, GL_DYNAMIC_COPY);
+        fill_ssbo_with_zeros();
 
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
     }
@@ -239,32 +279,6 @@ void load_and_apply_vertex_shader(uint name)
     notification_label.update("shader " + to_string(name) + ".glsl applied");
 }
 
-///  B U F F E R S   M A N A G M E N T  ///
-
-void swap_particles_buffers()
-{
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbos[flip]);
-    flip = !flip;
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, ssbos[flip]);
-}
-
-void update_prepared_spawn()
-{
-    delete[] prepared_spawn;
-    prepared_spawn = new vec2[spawn_amount];
-
-    for (uint i = 0; i < spawn_amount; i++)
-    {
-        float angle = float(rand()) * 6.2831 / RAND_MAX;
-        float dist = sqrt(float(rand()) / RAND_MAX);
-
-        prepared_spawn[i] = vec2(
-            cosf(angle) * dist,
-            sinf(angle) * dist
-        );
-    }
-}
-
 ///  E N T R Y  P O I N T  &  M A I N  L O O P  ///
 
 int main()
@@ -295,10 +309,10 @@ int main()
 
             glGenBuffers(1, &selections_buffer);
             glBindBuffer(GL_SHADER_STORAGE_BUFFER, selections_buffer);
-            uint* data = new uint[particles_count]();
-            glBufferData(GL_SHADER_STORAGE_BUFFER, particles_count * sizeof(uint), data, GL_DYNAMIC_COPY);
-            delete[] data;
+            glBufferData(GL_SHADER_STORAGE_BUFFER, particles_count * sizeof(uint), NULL, GL_DYNAMIC_COPY);
             glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, selections_buffer);
+            fill_ssbo_with_zeros();
+
             glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
         }
 
@@ -429,9 +443,8 @@ int main()
                                 new_particles_count++;
                         }
 
-                        uint* zdata = new uint[new_particles_count]();
-                        glBufferData(GL_SHADER_STORAGE_BUFFER, new_particles_count * sizeof(uint), zdata, GL_DYNAMIC_COPY);
-                        delete[] zdata;
+                        glBufferData(GL_SHADER_STORAGE_BUFFER, new_particles_count * sizeof(uint), NULL, GL_DYNAMIC_COPY);
+                        fill_ssbo_with_zeros();
 
                         particle* data = new particle[particles_count];
                         particle* new_data = new particle[new_particles_count];
@@ -729,9 +742,8 @@ int main()
                     glBufferData(GL_COPY_READ_BUFFER, (particles_count + spawn_amount) * sizeof(particle), 0, GL_DYNAMIC_COPY);
 
                     glBindBuffer(GL_SHADER_STORAGE_BUFFER, selections_buffer);
-                    uint* data = new uint[particles_count + spawn_amount]();
-                    glBufferData(GL_SHADER_STORAGE_BUFFER, (particles_count + spawn_amount) * sizeof(uint), data, GL_DYNAMIC_COPY);
-                    delete[] data;
+                    glBufferData(GL_SHADER_STORAGE_BUFFER, (particles_count + spawn_amount) * sizeof(uint), NULL, GL_DYNAMIC_COPY);
+                    fill_ssbo_with_zeros();
 
                     glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
                     glBindBuffer(GL_COPY_WRITE_BUFFER, 0);
