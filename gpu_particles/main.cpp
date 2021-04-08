@@ -9,6 +9,7 @@
 #include <SFML/System/Clock.hpp>
 #include <windows.h>
 #include <fstream>
+#include <filesystem>
 #include <vector>
 
 #include "labels.h"
@@ -17,6 +18,7 @@
 
 using namespace std;
 using namespace sf;
+namespace fs = std::filesystem;
 
 typedef unsigned int uint;
 typedef Vector2f vec2;
@@ -209,11 +211,18 @@ uint try_to_compile_shader(GLenum type, const string source)
     }
 }
 
-void load_and_apply_vertex_shader(uint name)
+void load_and_apply_vertex_shader(uint index)
 {
-    string path = "shaders/";
-    path += char(name + 48);
-    path += ".glsl";
+    string path;
+
+    for (const auto& entry : fs::directory_iterator("shaders"))
+    {
+        if (entry.is_regular_file())
+        {
+            if (entry.path().filename().c_str()[0] == char(index + 48))
+                path = entry.path().generic_string();
+        }
+    }
 
     uint vertex_shader_id = try_to_compile_shader(GL_VERTEX_SHADER, get_content_from_file(path));
 
@@ -276,7 +285,7 @@ void load_and_apply_vertex_shader(uint name)
         }
     }
 
-    notification_label.update("shader " + to_string(name) + ".glsl applied");
+    notification_label.update("shader " + path + " applied");
 }
 
 ///  E N T R Y  P O I N T  &  M A I N  L O O P  ///

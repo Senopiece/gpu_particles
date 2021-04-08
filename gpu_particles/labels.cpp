@@ -39,7 +39,7 @@ NotificationLabel::~NotificationLabel()
 
 void NotificationLabel::update(string new_text)
 {
-	label->setString(">" + new_text);
+	label->setString("> " + new_text);
 	fade_timer->restart();
 }
 
