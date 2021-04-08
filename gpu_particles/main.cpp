@@ -285,7 +285,7 @@ void load_and_apply_vertex_shader(uint index)
         }
     }
 
-    notification_label.update("shader " + path + " applied");
+    notification_label.update("shader " + fs::path(path).filename().string() + " applied");
 }
 
 ///  E N T R Y  P O I N T  &  M A I N  L O O P  ///
