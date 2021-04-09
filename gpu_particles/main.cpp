@@ -1,7 +1,4 @@
-﻿#define SFML_STATIC
-#define GLEW_STATIC
-
-#include <GL/glew.h>
+﻿#include <GL/glew.h>
 #include <SFML/Graphics.hpp>
 #include <SFML/OpenGL.hpp>
 #include <SFML/System/Vector2.hpp>
@@ -91,9 +88,9 @@ void update_prepared_spawn()
     delete[] prepared_spawn;
     prepared_spawn = new vec2[spawn_amount];
 
-    for (uint i = 0; i < spawn_amount; i++)
+    for (int i = 0; i < spawn_amount; i++)
     {
-        float angle = float(rand()) * 6.2831 / RAND_MAX;
+        float angle = float(rand()) * 6.2831f / RAND_MAX;
         float dist = sqrt(float(rand()) / RAND_MAX);
 
         prepared_spawn[i] = vec2(
@@ -117,7 +114,7 @@ void load_particles()
     }
 
     fs.seekg(0, fs.end);
-    uint length = fs.tellg();
+    int length = fs.tellg();
     fs.seekg(0, fs.beg);
 
     char* data = new char[length];
@@ -127,13 +124,13 @@ void load_particles()
     {
         throw runtime_error("Error while reading from " + savepath);
     }
-    else if (length % 16 != 0)
+    else if (length % sizeof(particle) != 0)
     {
-        throw runtime_error("Incorrect file length, load terminated");
+        throw runtime_error("Incorrect file length, loading terminated");
     }
     else
     {
-        particles_count = length / 16;
+        particles_count = length / sizeof(particle);
 
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbos[!flip]);
         glBufferData(GL_SHADER_STORAGE_BUFFER, length, data, GL_DYNAMIC_COPY);

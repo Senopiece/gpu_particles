@@ -27,7 +27,7 @@ void pass_uniform(uint prog_id, string name, vec4 v)
 
 void draw_circle(Window& window, vec2 center, float r, vec4 color)
 {
-    float theta = 2 * 3.1415926 / float(40);
+    float theta = 2 * 3.1415926f / float(40);
     float c = cosf(theta); //precalculate the sine and cosine
     float s = sinf(theta);
     float t;

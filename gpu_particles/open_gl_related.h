@@ -1,8 +1,5 @@
 #pragma once
 
-#define SFML_STATIC
-#define GLEW_STATIC
-
 #include <GL/glew.h>
 #include <string>
 #include <SFML/System/Vector2.hpp>
