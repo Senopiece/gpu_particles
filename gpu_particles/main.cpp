@@ -354,12 +354,10 @@ int main()
                         MB_RETRYCANCEL
                     );
 
-                    if (act == IDCANCEL)
-                    {
-                        return 0;
-                    }
-
                     delete[] msg;
+
+                    if (act == IDCANCEL)
+                        return 0;
                 }
             }
         }
