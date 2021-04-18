@@ -298,14 +298,7 @@ int main()
             return -1;
         }
 
-        // prepare shaders
-        {
-            frag_shader_id = try_to_compile_shader(
-                GL_FRAGMENT_SHADER,
-                "#version 330 core\nin vec4 pixel_color;\nout vec4 color;\nvoid main(){color = vec4(pixel_color);}"
-            );
-            load_and_apply_vertex_shader(1);
-        }
+        default_font.loadFromFile("font.ttf");
 
         // buffers init
         {
@@ -330,11 +323,46 @@ int main()
             glEnable(GL_PROGRAM_POINT_SIZE);
         }
 
-        load_particles();
+        // prepare shaders
+        {
+            frag_shader_id = try_to_compile_shader(
+                GL_FRAGMENT_SHADER,
+                "#version 330 core\nin vec4 pixel_color;\nout vec4 color;\nvoid main(){color = vec4(pixel_color);}"
+            );
 
-        update_prepared_spawn();
+            while (true)
+            {
+                try
+                {
+                    load_and_apply_vertex_shader(1);
+                    load_particles();
+                    update_prepared_spawn();
+                    break;
+                }
+                catch (runtime_error err)
+                {
+                    size_t size = strlen(err.what()) + 1;
+                    wchar_t* msg = new wchar_t[size];
 
-        default_font.loadFromFile("font.ttf");
+                    size_t outSize;
+                    mbstowcs_s(&outSize, msg, size, err.what(), size - 1);
+
+                    int act = MessageBox(
+                        window->getSystemHandle(),
+                        msg,
+                        L"Error",
+                        MB_RETRYCANCEL
+                    );
+
+                    if (act == IDCANCEL)
+                    {
+                        return 0;
+                    }
+
+                    delete[] msg;
+                }
+            }
+        }
     }
 
     Clock clock;
@@ -772,7 +800,7 @@ int main()
             size_t outSize;
             mbstowcs_s(&outSize, msg, size, err.what(), size - 1);
 
-            MessageBox(
+            int act = MessageBox(
                 window->getSystemHandle(),
                 msg,
                 L"Error",
