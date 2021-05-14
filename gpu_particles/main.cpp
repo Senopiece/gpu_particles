@@ -376,13 +376,13 @@ int main()
 
         // converted vectors //
 
+        // selection
+        vec2 ss = map_coord_to(*window, selection_start);
+        vec2 ds = map_coord_from(*window, selection_start, shift, scale);
+
         // mouse
         vec2 mp = map_coord_to(*window, actual_mouse_pos);
         vec2 dp = map_coord_from(*window, actual_mouse_pos, shift, scale);
-
-        // selection
-        vec2 ss;
-        vec2 ds;
 
         // handle input //
         try
@@ -396,7 +396,6 @@ int main()
                 if (event.type == Event::MouseMoved)
                 {
                     mouse_moved = true;
-                    vec2 mouse_pos = vec2(event.mouseMove.x, window->getSize().y - event.mouseMove.y);
 
                     if (!(Mouse::isButtonPressed(Mouse::Right) && (Keyboard::isKeyPressed(Keyboard::RShift) || Keyboard::isKeyPressed(Keyboard::LShift))))
                     {
@@ -423,9 +422,8 @@ int main()
                             if (selected.empty())
                             {
                                 // drag field
-                                shift.x += (mouse_pos.x - last_mouse_pos.x) * scale;
-                                shift.y += (mouse_pos.y - last_mouse_pos.y) * scale;
-                                pass_uniform(cur_prog_id, "shift", shift);
+                                shift.x += (actual_mouse_pos.x - last_mouse_pos.x) * scale;
+                                shift.y += (actual_mouse_pos.y - last_mouse_pos.y) * scale;
                             }
                             else
                             {
@@ -435,8 +433,8 @@ int main()
                                 glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, particles_count * sizeof(particle), data);
                                 for (uint const& i : selected)
                                 {
-                                    data[i].x += (mouse_pos.x - last_mouse_pos.x) * scale;
-                                    data[i].y += (mouse_pos.y - last_mouse_pos.y) * scale;
+                                    data[i].x += (actual_mouse_pos.x - last_mouse_pos.x) * scale;
+                                    data[i].y += (actual_mouse_pos.y - last_mouse_pos.y) * scale;
                                 }
                                 glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, particles_count * sizeof(particle), data);
                                 delete[] data;
@@ -448,11 +446,11 @@ int main()
                         pass_uniform(
                             cur_prog_id,
                             "mouse_pos",
-                            map_coord_from(*window, mouse_pos, shift, scale)
+                            map_coord_from(*window, actual_mouse_pos, shift, scale)
                         );
                     }
 
-                    last_mouse_pos = mouse_pos;
+                    last_mouse_pos = actual_mouse_pos;
                 }
                 else if (event.type == Event::KeyPressed)
                 {
@@ -659,13 +657,30 @@ int main()
                 notification_label.update(to_string(selected_count) + " particle" + (selected_count == 1 ? "": "s" ) + " was selected");
             }
 
-            // define converted selecion coordinates
-            ss = map_coord_to(*window, selection_start);
-            ds = map_coord_from(*window, selection_start, shift, scale);
+            // selection things
+            if (active_selection)
+            {   
+                // autoscroll on borders
+                float autoscroll_speed = 180.f / last_fps_estimate_result;
+                float autoscroll_area = 5.f;
+                vec2 delta = vec2();
 
-            // pass selection to shader
-            if (mouse_moved && active_selection)
-            {
+                if (actual_mouse_pos.x > window->getSize().x - autoscroll_area)
+                    delta.x -= autoscroll_speed;
+                if (actual_mouse_pos.x < autoscroll_area)
+                    delta.x += autoscroll_speed;
+                if (actual_mouse_pos.y > window->getSize().y - autoscroll_area)
+                    delta.y -= autoscroll_speed;
+                if (actual_mouse_pos.y < autoscroll_area)
+                    delta.y += autoscroll_speed;
+
+                shift += delta * scale;
+                selection_start += delta;
+
+                // pass selection to the shader
+                ds = map_coord_from(*window, selection_start, shift, scale);
+                ss = map_coord_to(*window, selection_start);
+
                 vec4 sel(ds.x, ds.y, dp.x, dp.y);
 
                 if (sel.z < sel.x)
@@ -684,6 +699,8 @@ int main()
 
                 pass_uniform(cur_prog_id, "selection", sel);
             }
+
+            pass_uniform(cur_prog_id, "shift", shift); // it's here beacuse variable shift can be updated in "selection things" and in "drag field" sections
 
             // change spawn properties
             if (Mouse::isButtonPressed(Mouse::Right) && (Keyboard::isKeyPressed(Keyboard::RShift) || Keyboard::isKeyPressed(Keyboard::LShift)))
